@@ -1,31 +1,16 @@
-/* ==========================================================================
-   Prototipe MCF Photobooth — perilaku layar operator + sinkronisasi ke
-   jendela layar tamu.
-
-   Di produksi keadaan sesi datang dari server lewat Server-Sent Events
-   (design.md §8). Di sini ia disimulasikan di browser dan disiarkan ke
-   jendela tamu lewat BroadcastChannel, supaya alur dua layar bisa dicoba
-   sungguhan: tekan Selesai di sini, QR muncul di monitor sebelah.
-
-   Butuh HTTP — buka lewat localhost, bukan file://, karena BroadcastChannel
-   dan localStorage tidak berbagi origin di file://.
-   ========================================================================== */
-
 (function () {
   'use strict';
 
-  // ---------------------------------------------------------------- navigasi
   var here = location.pathname.split('/').pop() || 'index.html';
   document.querySelectorAll('.nav a').forEach(function (a) {
     if (a.getAttribute('href') === here) a.setAttribute('aria-current', 'page');
   });
 
-  // ------------------------------------------------------------ kanal siaran
   var KEY = 'mcf-photobooth-state';
   var chan = ('BroadcastChannel' in window) ? new BroadcastChannel('mcf-photobooth') : null;
 
   function publish(state) {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { }
     if (chan) chan.postMessage(state);
   }
   function readState() {
@@ -40,9 +25,6 @@
 
   window.MCF = { publish: publish, readState: readState, subscribe: subscribe };
 
-  // ------------------------------------------------- membuka jendela tamu
-  // Ukuran jendela dibuat 9:16 supaya tata letak portrait langsung terlihat
-  // walau monitor keduanya belum terpasang.
   var guestWin = null;
   window.MCFbukaTamu = function () {
     guestWin = window.open('tamu.html', 'mcf-tamu', 'width=540,height=960');
@@ -53,15 +35,14 @@
     b.addEventListener('click', function () { window.MCFbukaTamu(); });
   });
 
-  // ============================================================ halaman sesi
   var root = document.querySelector('[data-sesi]');
   if (!root) return;
 
   var SIM = { jeda: 1700, upload: 2600, total: 12, gagalDi: [4, 8] };
   var simulasiGagal = true;
 
-  var sesi = null;          // { nama, kode, mulai }
-  var foto = [];            // { nama, status, masuk }
+  var sesi = null;
+  var foto = [];
   var tick = null, jam = null, urut = 40;
 
   var el = {
@@ -107,7 +88,7 @@
 
   function umur(ts) {
     var d = Math.round((Date.now() - ts) / 1000);
-    if (d < 5) return 'baru saja';        // "0 detik lalu" terbaca seperti bug
+    if (d < 5) return 'baru saja';
     if (d < 60) return d + ' detik lalu';
     var m = Math.floor(d / 60);
     return m + ' menit lalu';
@@ -129,7 +110,6 @@
     el.jumlahFoto.textContent = c.total + ' foto';
     el.rasio.textContent = c.ok + ' / ' + c.total;
 
-    // Nol kegagalan diam; satu saja gagal, kartunya menang atas dua di sebelahnya.
     el.kartuGagal.classList.toggle('counter-bad-live', c.gagal > 0);
     el.kartuGagal.classList.toggle('counter-bad-zero', c.gagal === 0);
     el.kartuGagal.querySelector('[data-chip-gagal]').className =
@@ -141,7 +121,7 @@
       c.gagal > 0 ? 'retry otomatis sudah habis' : 'semua percobaan upload berhasil';
 
     var namaGagal = foto.filter(function (f) { return f.status === 'gagal'; })
-                        .map(function (f) { return f.nama + '.JPG'; });
+      .map(function (f) { return f.nama + '.JPG'; });
     el.pitaGagal.hidden = namaGagal.length === 0;
     if (namaGagal.length) {
       el.judulGagal.textContent = namaGagal.length + ' foto gagal terupload setelah 3 percobaan';
@@ -164,21 +144,21 @@
     el.grid.innerHTML = foto.slice().reverse().map(function (f) {
       var s = f.status;
       var badge = s === 'ok' ? '<span class="state s-ok">Di Drive</span>'
-                : s === 'antre' ? '<span class="state s-wait">Antre</span>' : '';
+        : s === 'antre' ? '<span class="state s-wait">Antre</span>' : '';
       var bar = s === 'gagal'
         ? '<button class="retry" type="button" data-retry="' + f.nama + '">' +
-          '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15.6 8.2A5.8 5.8 0 1 0 15.9 12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M16 4.4v3.9h-3.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-          '<span class="retry-long">Gagal — coba lagi</span><span class="retry-short">Coba lagi</span></button>'
+        '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15.6 8.2A5.8 5.8 0 1 0 15.9 12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M16 4.4v3.9h-3.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+        '<span class="retry-long">Gagal — coba lagi</span><span class="retry-short">Coba lagi</span></button>'
         : '';
       return '<div class="photo' + (s === 'gagal' ? ' is-bad' : s === 'antre' ? ' is-wait' : '') + '">' +
-             '<span class="fill"></span><span class="tag">' + f.nama + '</span>' + badge + bar + '</div>';
+        '<span class="fill"></span><span class="tag">' + f.nama + '</span>' + badge + bar + '</div>';
     }).join('');
 
     var last = foto[foto.length - 1];
     if (last) {
       var u = umur(last.masuk);
       el.terakhir.textContent = u === 'baru saja' ? 'Foto terakhir baru saja masuk'
-                                                  : 'Foto terakhir masuk ' + u;
+        : 'Foto terakhir masuk ' + u;
       el.terakhirNama.textContent = last.nama + '.JPG';
     } else {
       el.terakhir.textContent = 'Belum ada foto masuk';
