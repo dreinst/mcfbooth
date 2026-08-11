@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pengaturan — MCF Photobooth</title>
+<link rel="icon" href="favicon.svg">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="dot-mark"></span> MCF Photobooth</div>
+    <nav class="nav" aria-label="Navigasi utama">
+        <a href="index.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.2 6.6h2.4l1.1-1.8h6.6l1.1 1.8h2.4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.9" stroke="currentColor" stroke-width="1.5"/></svg></span>Sesi</a>
+        <a href="riwayat.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7.4" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.8v4.5l3 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Riwayat<span class="nav-badge">42</span></a>
+        <a href="layar-tamu.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2.6" y="3.4" width="14.8" height="10" rx="1.4" stroke="currentColor" stroke-width="1.5"/><path d="M7 16.6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 13.4v3.2" stroke="currentColor" stroke-width="1.6"/></svg></span>Layar tamu</a>
+        <a href="pengaturan.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.6v2m0 10.8v2M17.4 10h-2M4.6 10h-2m12.2-5.2-1.4 1.4M6.8 13.2l-1.4 1.4m0-9.8 1.4 1.4m6.4 6.4 1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Pengaturan</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="health">
+        <span class="health-title">Kesehatan sistem</span>
+        <div class="health-row"><span class="dot dot-wait"></span> Kuota Drive <span class="val">4,2 GB</span></div>
+        <div class="health-row"><span class="dot dot-ok"></span> Internet <span class="val">stabil</span></div>
+        <div class="health-row"><span class="dot dot-ok"></span> Disk lokal <span class="val">412 GB</span></div>
+        <div class="health-row"><span class="dot dot-ok"></span> Layar tamu <span class="val">terhubung</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="appbar">
+      <div>
+        <h1 class="page-title">Pengaturan</h1>
+        <p class="page-sub">Akun, folder, dan perilaku upload</p>
+      </div>
+      <div class="topbar-spacer"></div>
+
+    </header>
+
+    <main class="page">
+      <div class="wrap-narrow stack-24">
+
+        <section class="card">
+          <span class="section-label">Google Drive</span>
+          <div class="row-between" style="margin-top:10px">
+            <div>
+              <div class="body"><strong>mcf.photobooth@gmail.com</strong></div>
+              <div class="mono-plain subtle" style="margin-top:4px">scope drive.file &mdash; hanya folder buatan aplikasi ini</div>
+            </div>
+            <button class="btn btn-sm" type="button">Ganti akun</button>
+          </div>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between" style="margin-bottom:8px">
+            <span class="small muted">Kuota terpakai</span>
+            <span class="mono-plain num" style="color:var(--wait)">10,8 dari 15 GB</span>
+          </div>
+          <div class="meter"><span class="m-wait" style="width:72%"></span></div>
+          <p class="small subtle" style="margin-top:12px">
+            Sisa 4,2 GB cukup untuk sekitar 120 foto. Kosongkan atau siapkan akun lain
+            sebelum acara besar.
+          </p>
+        </section>
+
+        <section class="card">
+          <span class="section-label">Folder</span>
+          <div class="row-between" style="margin-top:12px">
+            <div>
+              <div class="body"><strong>Folder tethering</strong></div>
+              <div class="mono-plain subtle" style="margin-top:4px">C:\photobooth\tether_dropbox</div>
+              <div class="small subtle" style="margin-top:4px">tempat digiCamControl menaruh hasil jepretan</div>
+            </div>
+            <button class="btn btn-sm" type="button">Ubah</button>
+          </div>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between">
+            <div>
+              <div class="body"><strong>Arsip lokal</strong></div>
+              <div class="mono-plain subtle" style="margin-top:4px">C:\photobooth\local_archive</div>
+              <div class="small subtle" style="margin-top:4px">sisa 412 GB &mdash; tidak pernah dihapus otomatis</div>
+            </div>
+            <button class="btn btn-sm" type="button">Ubah</button>
+          </div>
+          <div class="banner banner-wait" style="margin-top:18px">
+            <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true" style="flex:0 0 22px;margin-top:1px"><path d="M10 3.4 2.8 16h14.4L10 3.4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8.2v3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="13.6" r=".95" fill="currentColor"/></svg>
+            <div class="banner-body">
+              <div class="banner-title">Tidak ada tombol hapus arsip di sini</div>
+              <div class="banner-text">
+                Arsip lokal adalah lapis backup kedua setelah kartu SD. Pembersihannya
+                dilakukan manual lewat Explorer, sengaja tidak disediakan di aplikasi.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <span class="section-label">Upload</span>
+          <div class="row-between" style="margin-top:12px">
+            <div>
+              <div class="body"><strong>Percobaan ulang otomatis</strong></div>
+              <div class="small subtle" style="margin-top:4px">jeda 1, 5, lalu 15 detik sebelum ditandai gagal</div>
+            </div>
+            <span class="chip chip-idle">3 kali</span>
+          </div>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between">
+            <div>
+              <div class="body"><strong>Izin folder sesi</strong></div>
+              <div class="small subtle" style="margin-top:4px">siapa pun dengan tautan &mdash; hanya bisa melihat, tidak bisa menghapus</div>
+            </div>
+            <span class="chip chip-ok"><span class="dot dot-ok"></span> Viewer</span>
+          </div>
+        </section>
+
+        <section class="card">
+          <span class="section-label">Layar tamu</span>
+          <div class="row-between" style="margin-top:12px">
+            <div>
+              <div class="body"><strong>Monitor kedua</strong></div>
+              <div class="small subtle" style="margin-top:4px">1080 &times; 1920 portrait &mdash; jendela terbuka</div>
+            </div>
+            <button class="btn btn-sm" type="button" data-buka-tamu>Buka jendela</button>
+          </div>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between">
+            <div>
+              <div class="body"><strong>QR bertahan sampai</strong></div>
+              <div class="small subtle" style="margin-top:4px">sesi berikutnya dimulai &mdash; tidak ada hitung mundur</div>
+            </div>
+            <span class="chip chip-idle">Sesi berikutnya</span>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

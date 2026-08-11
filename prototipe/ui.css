@@ -1,0 +1,946 @@
+/* ==========================================================================
+   MCF Photobooth — token & komponen
+   Tidak ada permintaan jaringan di berkas ini. Semua warna lewat variabel.
+   Font produksi (Hanken Grotesk, JetBrains Mono) belum ada di repo — lihat
+   catatan di design.md §2.3. Sampai berkas woff2-nya ditaruh di
+   app/static/fonts/, stack di bawah jatuh ke font sistem.
+   ========================================================================== */
+
+:root {
+  /* Netral — kanvas sengaja off-white, bukan #fff, untuk mengurangi silau
+     di ruangan gelap. Putih murni hanya dipakai di permukaan kartu. */
+  --bg:            #f4f5f7;
+  --surface:       #ffffff;
+  --surface-2:     #fafbfc;
+  --line:          #e2e5ea;
+  --line-strong:   #cbd0d8;
+
+  --ink:           #12161f;
+  --ink-2:         #5a6270;
+  --ink-3:         #616875;
+
+  /* Aksen — hanya untuk aksi utama dan keadaan aktif */
+  --accent:        #1b4fd8;
+  --accent-strong: #143da8;
+  --accent-soft:   #eaf0ff;
+  --on-accent:     #ffffff;
+
+  /* Status — satu warna satu arti, tidak dipakai untuk hal lain */
+  --ok:            #0f7a4a;
+  --ok-soft:       #e6f4ec;
+  --wait:          #9a6400;
+  --wait-soft:     #fdf3e0;
+  --bad:           #c02626;
+  --bad-strong:    #931d1d;
+  --bad-soft:      #fdeaea;
+
+  /* Bentuk */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* Elevasi — hairline dulu, bayangan hanya untuk lapisan mengambang */
+  --shadow-overlay: 0 24px 48px -12px rgba(18, 22, 31, .18),
+                    0 2px 8px rgba(18, 22, 31, .06);
+
+  /* Gerak */
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --t-fast: 140ms;
+  --t-base: 200ms;
+
+  --font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system,
+             "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+               Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+/* Aturan display dari stylesheet penulis mengalahkan [hidden] bawaan browser.
+   Tanpa baris ini, .overlay yang ber-hidden tetap membentang selayar penuh dan
+   menelan setiap klik — elemennya tak terlihat, tapi tetap ada. */
+[hidden] { display: none !important; }
+
+/* Satu aturan cincin fokus untuk semua yang bisa dijangkau papan ketik.
+   Ditulis di sini, bukan per komponen, supaya elemen baru tidak lolos tanpa
+   penanda fokus. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* --------------------------------------------------------------- tipografi */
+
+.display  { font-size: 44px; line-height: 1.08; font-weight: 800; letter-spacing: -.022em; margin: 0; }
+.h1       { font-size: 28px; line-height: 1.2;  font-weight: 700; letter-spacing: -.014em; margin: 0; }
+.h2       { font-size: 20px; line-height: 1.3;  font-weight: 700; letter-spacing: -.008em; margin: 0; }
+.body     { font-size: 16px; line-height: 1.5;  margin: 0; }
+.small    { font-size: 14px; line-height: 1.45; margin: 0; }
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.mono-plain { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0; text-transform: none; }
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+.muted   { color: var(--ink-2); }
+.subtle  { color: var(--ink-3); }
+
+/* ------------------------------------------------------------------- layout */
+
+/* ------------------------------------------------------------- kerangka app
+   Sidebar tetap + area konten. Empat tujuan, semuanya punya isi nyata —
+   bukan menu hias seperti Hardware/Settings/Log Out di desain lama. */
+
+/* min-width: 0 pada kedua kolom — grid item bawaannya min-width: auto, dan itu
+   membuat sidebar melebar mengikuti isinya alih-alih menggulir di dalamnya. */
+.app { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100%; }
+.app > * { min-width: 0; }
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  padding: 22px 14px 18px;
+  position: sticky; top: 0;
+  height: 100vh;
+}
+.sidebar .brand { padding: 0 10px 22px; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 48px; padding: 0 12px;
+  border-radius: var(--r-md);
+  color: var(--ink-2); text-decoration: none;
+  font-size: 15px; font-weight: 600;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.nav a:hover { background: var(--surface-2); color: var(--ink); }
+.nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); }
+.nav a[aria-current="page"] .nav-icon { color: var(--accent); }
+.nav .nav-icon { flex: 0 0 20px; color: var(--ink-3); display: inline-flex; }
+.nav .nav-badge {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+  color: var(--ink-3);
+}
+.nav a[aria-current="page"] .nav-badge { color: var(--accent-strong); }
+
+.sidebar-foot { margin-top: auto; padding-top: 16px; }
+.health {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  padding: 12px;
+}
+.health-title {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); display: block; margin-bottom: 9px;
+}
+.health-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.health-row + .health-row { margin-top: 7px; }
+.health-row .val { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+
+.appbar {
+  height: 64px; flex: 0 0 64px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 28px;
+  position: sticky; top: 0; z-index: 20;
+}
+.appbar .page-title { font-size: 18px; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+.appbar .page-sub { font-size: 13px; color: var(--ink-3); margin: 2px 0 0; }
+
+.brand {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -.01em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+.brand .dot-mark {
+  width: 18px; height: 18px; border-radius: var(--r-sm);
+  background: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.brand .dot-mark::after {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--on-accent);
+}
+
+.topbar-spacer { flex: 1 1 auto; }
+
+.page { flex: 1 1 auto; padding: 28px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+.wrap-narrow { max-width: 720px; margin: 0 auto; }
+
+.stack-32 > * + * { margin-top: 32px; }
+.stack-24 > * + * { margin-top: 24px; }
+.stack-16 > * + * { margin-top: 16px; }
+.stack-12 > * + * { margin-top: 12px; }
+.stack-8  > * + * { margin-top: 8px; }
+
+.split { display: grid; grid-template-columns: 1.45fr 1fr; gap: 24px; align-items: start; }
+
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.row-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+
+/* --------------------------------------------------------------------- kartu */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 24px;
+}
+.card-tight { padding: 16px; }
+.card-flush { padding: 0; overflow: hidden; }
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-3);
+  display: block;
+  margin-bottom: 8px;
+}
+
+hr.rule { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
+
+/* ------------------------------------------------------------------- tombol */
+
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  min-height: 48px;
+  padding: 0 20px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line-strong);
+  transition: background var(--t-fast) var(--ease),
+              border-color var(--t-fast) var(--ease),
+              color var(--t-fast) var(--ease),
+              transform var(--t-fast) var(--ease);
+}
+.btn:hover { background: var(--surface-2); border-color: var(--ink-3); }
+.btn:active { transform: scale(.985); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+
+.btn-danger-ghost { background: var(--surface); color: var(--bad); border-color: var(--bad); }
+.btn-danger-ghost:hover { background: var(--bad-soft); color: var(--bad-strong); border-color: var(--bad-strong); }
+
+.btn-quiet { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn-quiet:hover { background: var(--surface-2); border-color: var(--line); color: var(--ink); }
+
+.btn-lg { min-height: 64px; font-size: 19px; font-weight: 700; padding: 0 28px; border-radius: var(--r-md); }
+.btn-sm { min-height: 44px; font-size: 14px; padding: 0 14px; }
+.btn-block { width: 100%; }
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border-color: var(--line);
+  transform: none;
+}
+.btn:disabled:hover { background: var(--surface-2); border-color: var(--line); }
+
+/* Alasan tombol nonaktif — tombol tidak pernah dihilangkan, alasannya ditulis */
+.btn-reason {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--bad);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* -------------------------------------------------------------------- input */
+
+.field-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+
+.input {
+  width: 100%;
+  min-height: 64px;
+  padding: 0 18px;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  transition: border-color var(--t-fast) var(--ease),
+              box-shadow var(--t-fast) var(--ease),
+              background var(--t-fast) var(--ease);
+}
+.input::placeholder { color: var(--ink-3); font-weight: 400; }
+.input:focus { background: var(--surface); border-color: var(--accent); }
+/* Cincin fokus input memakai perlakuan yang sama dengan tombol. Border 1px
+   yang berubah warna saja terlalu tipis untuk dilihat sambil berdiri. */
+.input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.input-search { min-height: 56px; font-size: 17px; font-weight: 500; padding-left: 46px; }
+.search-wrap { position: relative; }
+.search-wrap .search-icon {
+  position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+  color: var(--ink-3); pointer-events: none;
+}
+
+/* -------------------------------------------------------------------- chip */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip-ok   { background: var(--ok-soft);   color: var(--ok);     border-color: rgba(15,122,74,.22); }
+.chip-wait { background: var(--wait-soft); color: var(--wait);   border-color: rgba(154,100,0,.22); }
+.chip-bad  { background: var(--bad-soft);  color: var(--bad);    border-color: rgba(192,38,38,.24); }
+.chip-idle { background: var(--surface-2); color: var(--ink-2);  border-color: var(--line-strong); }
+.chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: rgba(27,79,216,.2); }
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+.dot-ok { background: var(--ok); }
+.dot-wait { background: var(--wait); }
+.dot-bad { background: var(--bad); }
+.dot-idle { background: var(--ink-3); }
+.dot-accent { background: var(--accent); }
+
+/* Satu-satunya animasi berulang di seluruh aplikasi: penanda sesi hidup.
+   Opacity saja — tidak memicu layout maupun paint ulang. */
+.dot-live { background: var(--ok); animation: breathe 2.4s var(--ease) infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ------------------------------------------------------- pemeriksaan sistem */
+
+.check-list { list-style: none; margin: 0; padding: 0; }
+.check-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.check-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.check-list li:first-child { padding-top: 0; }
+.check-icon { flex: 0 0 20px; margin-top: 2px; }
+.check-body { flex: 1 1 auto; min-width: 0; }
+.check-name { font-size: 15px; font-weight: 600; display: block; }
+.check-value {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.check-value.is-bad { color: var(--bad); }
+.check-value.is-wait { color: var(--wait); }
+
+/* --------------------------------------------------------------- penghitung */
+
+.counters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+.counter {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 20px;
+  position: relative;
+}
+.counter .counter-n {
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  margin: 10px 0 4px;
+}
+.counter .counter-label { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+.counter .counter-meta { font-size: 13px; color: var(--ink-3); margin-top: 2px; }
+
+.counter-ok .counter-n { color: var(--ok); }
+.counter-wait .counter-n { color: var(--wait); }
+
+/* Nol kegagalan diam; begitu ada satu, kartunya menang atas dua kartu lain. */
+.counter-bad-zero .counter-n { color: var(--ink-3); }
+.counter-bad-live {
+  border-color: var(--bad);
+  border-width: 2px;
+  padding: 19px;
+  background: var(--bad-soft);
+}
+.counter-bad-live .counter-n { color: var(--bad); }
+.counter-bad-live .counter-label { color: var(--bad-strong); }
+.counter-bad-live .counter-meta { color: var(--bad-strong); }
+
+/* ------------------------------------------------------------------- meteran */
+
+.meter { height: 8px; background: var(--line); border-radius: var(--r-pill); overflow: hidden; display: flex; }
+.meter span { display: block; height: 100%; }
+.meter .m-ok { background: var(--ok); }
+.meter .m-wait { background: var(--wait); }
+.meter .m-bad { background: var(--bad); }
+
+/* ------------------------------------------------- cermin layar tamu (operator)
+   Operator menghadap laptop dan tidak bisa melihat monitor kedua. Tanpa cermin
+   ini, QR bisa salah sesi selama sepuluh menit tanpa ada yang tahu. */
+
+/* align-items: start, bukan stretch — kartu penanda isinya pendek dan akan
+   meregang jadi bidang kosong setinggi kartu cermin di sebelahnya. */
+.split-mirror { display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start; }
+
+/* Cermin memakai iframe berskala dari halaman tamu yang sungguhan, bukan
+   gambaran abstrak — kalau yang tampil di monitor kedua salah, operator harus
+   melihat kesalahannya, bukan versi idealnya. */
+.mirror {
+  position: relative;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  overflow: hidden;
+  margin: 0 auto;
+}
+.mirror iframe {
+  width: 1080px; height: 1920px;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+/* 1080 × 1920 diperkecil; lebar wadah menentukan skalanya. */
+.mirror-sm { width: 168px; height: 299px; }
+.mirror-sm iframe { transform: scale(.15556); }
+.mirror-lg { width: 360px; height: 640px; }
+.mirror-lg iframe { transform: scale(.33333); }
+
+.mirror-unknown {
+  border-radius: var(--r-md);
+  border: 1px solid var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad-strong);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  padding: 16px; text-align: center;
+  margin: 0 auto;
+}
+.mirror-unknown .m-title { font-size: 14px; font-weight: 700; }
+.mirror-unknown .m-sub { font-size: 11.5px; font-family: var(--font-mono); }
+
+/* ------------------------------------------------------------------- banner */
+
+.banner {
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  border: 1px solid;
+}
+.banner-bad { background: var(--bad-soft); border-color: rgba(192,38,38,.3); color: var(--bad-strong); }
+.banner-wait { background: var(--wait-soft); border-color: rgba(154,100,0,.3); color: #6d4700; }
+.banner-accent { background: var(--accent-soft); border-color: rgba(27,79,216,.25); color: var(--accent-strong); }
+.banner .banner-body { flex: 1 1 auto; min-width: 0; }
+.banner .banner-title { font-weight: 700; font-size: 16px; }
+.banner .banner-text { font-size: 14.5px; margin-top: 3px; opacity: .92; }
+
+/* -------------------------------------------------------------------- foto */
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+}
+
+.photo {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+/* Placeholder prototipe — di produksi ini <img> dari /api/thumb/<id>. */
+.photo .fill {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(168deg, #e7eaf0 0%, #d2d8e2 46%, #c3cad6 100%);
+}
+.photo .fill::after {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(112deg, rgba(255,255,255,.55) 0 22%, transparent 46%),
+    linear-gradient(0deg, rgba(18,22,31,.14), transparent 62%);
+}
+.photo .tag {
+  position: absolute; left: 8px; top: 8px;
+  background: rgba(18,22,31,.72);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  padding: 3px 7px;
+  border-radius: var(--r-sm);
+}
+.photo .state {
+  position: absolute; right: 8px; bottom: 8px;
+  height: 26px; padding: 0 9px;
+  border-radius: var(--r-pill);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .04em;
+  text-transform: uppercase; font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+}
+.photo .state.s-ok { color: var(--ok); border-color: rgba(15,122,74,.35); }
+.photo .state.s-wait { color: var(--wait); border-color: rgba(154,100,0,.35); }
+.photo .state.s-bad { color: var(--bad); border-color: rgba(192,38,38,.4); }
+.photo.is-bad { border: 2px solid var(--bad); }
+.photo.is-wait .fill { opacity: .55; }
+
+/* Foto gagal memakai satu bilah selebar kartu, bukan pil mengambang plus chip
+   status terpisah. Satu elemen mengerjakan dua hal — menyatakan kegagalan dan
+   menawarkan perbaikannya — dan tingginya 44px, bukan 30px. Aksi ini selalu
+   terlihat, bukan hover-only: layar bisa berupa layar sentuh, dan operator
+   memakai trackpad sambil berdiri. */
+.photo .retry {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 44px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--bad); color: #fff; border: 0;
+  font-family: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+.photo .retry:hover { background: var(--bad-strong); }
+.photo .retry:focus-visible { outline-offset: -3px; }
+.photo .retry span { white-space: nowrap; }
+.photo .retry .retry-short { display: none; }
+
+/* -------------------------------------------------------------------- tabel */
+
+.list { display: flex; flex-direction: column; }
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  transition: background var(--t-fast) var(--ease);
+}
+.list-row:last-child { border-bottom: 0; }
+.list-row:hover { background: var(--surface-2); }
+/* Baris bermasalah tetap menonjol berhari-hari kemudian, bukan cuma saat
+   sesinya berjalan. */
+.list-row.has-problem { background: var(--bad-soft); box-shadow: inset 3px 0 0 var(--bad); }
+.list-row.has-problem:hover { background: #fce2e2; }
+.list-row .who { flex: 1 1 auto; min-width: 0; }
+.list-row .who .name { font-size: 17px; font-weight: 700; }
+.list-row .who .code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+.list-row .acts { display: flex; gap: 8px; flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------ overlay */
+
+/* align-items: center memotong dialog yang lebih tinggi dari layar dan tidak
+   menyisakan cara untuk menggulirnya — di 375×667 tombol utamanya jatuh di
+   bawah lipatan. Auto-margin menengahkan saat muat, menggulir saat tidak. */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(18, 22, 31, .45);
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto;
+  padding: 24px;
+  z-index: 50;
+  animation: fade var(--t-base) var(--ease) both;
+}
+.dialog {
+  width: 100%;
+  max-width: 560px;
+  margin: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-overlay);
+  padding: 28px;
+  animation: rise var(--t-base) var(--ease) both;
+}
+.dialog-actions { display: flex; gap: 12px; margin-top: 28px; }
+.dialog-actions .btn { flex: 1 1 0; }
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* --------------------------------------------------------------- layar tamu */
+
+.guest {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px 88px;
+  text-align: center;
+  background: var(--bg);
+  position: relative;
+}
+.guest-name { font-size: 60px; line-height: 1.05; font-weight: 800; letter-spacing: -.028em; margin: 0; }
+.guest-sub { font-size: 22px; color: var(--ink-2); margin: 12px 0 0; }
+
+/* Kartu QR selalu hitam di atas putih, apa pun temanya. Membalik QR
+   membuat sebagian pemindai HP gagal membacanya. */
+.qr-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 24px;
+  margin: 32px 0 0;
+  display: inline-flex;
+  box-shadow: 0 12px 32px -16px rgba(18,22,31,.25);
+}
+.qr-card svg, .qr-card img { display: block; width: 340px; height: 340px; }
+
+.guest-instruction { font-size: 20px; font-weight: 600; margin: 28px 0 0; }
+.guest-link {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-3);
+  margin-top: 10px;
+  word-break: break-all;
+  max-width: 520px;
+}
+.guest-strip { display: flex; gap: 10px; margin-top: 32px; flex-wrap: wrap; justify-content: center; }
+.guest-strip .photo { width: 104px; aspect-ratio: 3 / 2; }
+
+/* ---------------------------------------- layar tamu: sambutan & memotret */
+
+.guest-wordmark {
+  font-size: 76px; line-height: 1.02; font-weight: 800; letter-spacing: -.03em;
+  margin: 0; display: flex; align-items: center; gap: 20px;
+}
+.guest-wordmark .mark {
+  width: 62px; height: 62px; border-radius: var(--r-lg);
+  background: var(--accent); display: inline-flex;
+  align-items: center; justify-content: center; flex: 0 0 62px;
+}
+.guest-wordmark .mark::after {
+  content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--on-accent);
+}
+
+.guest-lead { font-size: 26px; color: var(--ink-2); margin: 28px 0 0; max-width: 640px; }
+
+.guest-shoot { width: 100%; max-width: 1200px; }
+.guest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+  margin-top: 36px;
+}
+.guest-grid .photo { border-radius: var(--r-lg); }
+
+/* Foto yang baru datang masuk sekali, bukan berdenyut terus. */
+.guest-grid .photo.is-new { animation: rise var(--t-base) var(--ease) both; }
+
+.guest-note {
+  font-size: 19px; color: var(--ink-2); margin: 36px 0 0;
+  display: inline-flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-pill); padding: 12px 22px;
+}
+
+/* Jalan keluar dikecilkan dan ditaruh di sudut: ini kontrol operator,
+   bukan afordansi untuk tamu. */
+.guest-exit {
+  position: absolute;
+  right: 20px; bottom: 20px;
+  min-height: 44px;
+}
+
+/* ------------------------------------------------------- keadaan kosong dsb */
+
+.empty {
+  text-align: center;
+  padding: 56px 24px;
+}
+.empty .empty-title { font-size: 18px; font-weight: 700; }
+.empty .empty-text { color: var(--ink-2); margin-top: 6px; font-size: 15px; }
+
+/* Kerangka muat — meniru bentuk akhir, bukan spinner tunggal */
+.skel { background: var(--line); border-radius: var(--r-sm); animation: shimmer 1.4s var(--ease) infinite; }
+@keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* --------------------------------------------------- penukar varian prototipe
+   Sengaja dibuat terlihat seperti perkakas, bukan bagian produk. */
+.variants {
+  position: fixed; right: 16px; bottom: 16px; z-index: 80;
+  display: flex; gap: 6px; align-items: center;
+  background: rgba(255,255,255,.94);
+  border: 1px dashed var(--ink-3);
+  border-radius: var(--r-pill);
+  padding: 6px 8px 6px 12px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ink-3);
+  backdrop-filter: blur(6px);
+  flex-wrap: wrap;
+  max-width: calc(100vw - 32px);
+  opacity: .5;
+  transition: opacity var(--t-fast) var(--ease);
+}
+.variants:hover, .variants:focus-within { opacity: 1; }
+.variants button {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .05em;
+  text-transform: uppercase;
+  border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--ink-2); border-radius: var(--r-pill);
+  padding: 5px 11px; cursor: pointer;
+}
+.variants button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* Elemen varian disembunyikan tanpa memaksa display saat tampil, supaya
+   span tetap inline dan grid tetap grid. */
+[data-variant]:not(.is-on) { display: none !important; }
+
+/* ------------------------------------------------------------------ responsif */
+
+@media (max-width: 1023px) {
+  .split, .split-mirror { display: block; }
+  .split > * + *, .split-mirror > * + * { margin-top: 24px; }
+  .display { font-size: 34px; }
+  .qr-card svg, .qr-card img { width: 280px; height: 280px; }
+  .guest-name { font-size: 42px; }
+  /* Layar tamu memang untuk monitor besar, tapi ia tetap tidak boleh pecah
+     kalau dibuka di jendela sempit saat penyetelan. */
+  .guest-wordmark { font-size: 50px; gap: 16px; }
+  .guest-wordmark .mark { width: 44px; height: 44px; flex-basis: 44px; }
+  .guest-wordmark .mark::after { width: 15px; height: 15px; }
+  .guest-lead { font-size: 21px; }
+  .guest-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .guest-note { font-size: 17px; }
+}
+
+/* Baris riwayat berubah bentuk jadi kartu sebelum kolomnya bertabrakan.
+   Di 768px kode sesi dan chip status masih muat secara teknis, tapi saling
+   menempel sampai tidak terbaca. */
+/* Sidebar jadi bilah mendatar di layar sempit. Aplikasi ini hidup di laptop,
+   tapi ia tidak boleh pecah kalau jendelanya dikecilkan. */
+@media (max-width: 899px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static; height: auto;
+    flex-direction: row; align-items: center; gap: 12px;
+    border-right: 0; border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    overflow-x: auto;
+  }
+  .sidebar .brand { padding: 0 8px 0 0; }
+  .nav { flex-direction: row; gap: 4px; }
+  .nav a { min-height: 44px; padding: 0 12px; white-space: nowrap; }
+  .nav .nav-badge { display: none; }
+  .sidebar-foot { display: none; }
+  /* Judul halaman dan chip status tidak muat sebaris di 375px; bilahnya
+     melipat jadi dua baris alih-alih mendorong halaman menggulir mendatar. */
+  .appbar {
+    height: auto; flex: 0 0 auto; flex-wrap: wrap;
+    padding: 12px 16px; gap: 8px 10px;
+  }
+  .appbar .topbar-spacer { flex-basis: 100%; height: 0; }
+
+  .list-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .list-row .acts .btn { flex: 1 1 0; }
+  .list-row .chip { align-self: flex-start; }
+  /* Saat baris menumpuk, aksi sekunder butuh batas — tanpa baris di sebelahnya
+     ia terbaca sebagai teks biasa, bukan tombol. */
+  .list-row .acts .btn-quiet { border-color: var(--line-strong); }
+}
+
+@media (max-width: 719px) {
+  .page { padding: 20px 16px 40px; }
+  /* Bilah atas melipat jadi dua baris — memaksa merek dan tiga chip ke dalam
+     375px membuat halaman menggulir horizontal. */
+  .topbar {
+    height: auto;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    gap: 8px 10px;
+  }
+  .topbar-spacer { flex-basis: 100%; height: 0; }
+  /* Kepala sesi menumpuk supaya tombol Selesai jadi selebar layar */
+  .row-top { flex-direction: column; align-items: stretch; gap: 18px; }
+  .row-top > div:last-child .btn { width: 100%; }
+  .counters { grid-template-columns: 1fr; }
+  /* auto-fill jatuh ke satu kolom di 375px karena kurang 1px; dipaksa dua. */
+  .photo-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* Label panjang melipat dua baris di kartu selebar 148px dan bilahnya
+     memakan setengah foto. Warna merah sudah menyatakan gagal. */
+  .photo .retry .retry-long { display: none; }
+  .photo .retry .retry-short { display: inline; }
+  .photo .retry { font-size: 13px; gap: 6px; }
+  /* Cuplikan besar tidak muat di 375px; skalanya diturunkan, bukan dipotong. */
+  .mirror-lg { width: 240px; height: 427px; }
+  .mirror-lg iframe { transform: scale(.22222); }
+  .card { padding: 18px; }
+  .display { font-size: 30px; }
+  .counter .counter-n { font-size: 38px; }
+  /* Baris riwayat berubah bentuk jadi kartu — memaksa 5 kolom masuk 375px
+     secara teknis "responsif" tapi tidak terbaca. */
+  .list-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .list-row .acts .btn { flex: 1 1 0; }
+  /* column, bukan column-reverse: urutan DOM sudah menaruh aksi utama di
+     akhir, jadi menumpuk apa adanya membuatnya paling dekat dengan ibu jari
+     dan aksi berisiko tidak pernah jatuh ke posisi termudah. */
+  .dialog-actions { flex-direction: column; }
+  .dialog-actions .btn { flex: 1 1 auto !important; }
+  .guest-name { font-size: 32px; }
+  .guest-wordmark { font-size: 34px; gap: 12px; }
+  .guest-wordmark .mark { width: 32px; height: 32px; flex-basis: 32px; border-radius: var(--r-md); }
+  .guest-wordmark .mark::after { width: 11px; height: 11px; }
+  .guest-lead { font-size: 18px; }
+  .guest-sub { font-size: 18px; }
+  .guest-instruction { font-size: 17px; }
+  .guest-note { font-size: 15px; padding: 10px 16px; }
+  .guest-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .qr-card svg, .qr-card img { width: 240px; height: 240px; }
+}
+
+/* Konten lebar menggulir di wadahnya sendiri; body tidak pernah horizontal */
+.scroll-x { overflow-x: auto; }
+
+/* ==========================================================================
+   Layar tamu portrait — monitor 1920×1080 diputar berdiri, jadi 1080×1920.
+   Lebar adalah kendalanya, bukan tinggi, jadi semua ukuran diikat ke vw.
+   Blok ini ditaruh paling akhir supaya menang atas media query berbasis lebar
+   di atas: 1080px masuk kategori "desktop" kalau hanya lebar yang dilihat.
+   ========================================================================== */
+
+@media (orientation: portrait) {
+
+  .guest {
+    min-height: 100vh;
+    justify-content: space-between;
+    padding: 7vh 5vw 6vh;
+    gap: 0;
+  }
+  .guest > [data-variant] {
+    flex: 1 1 auto;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    width: 100%;
+  }
+
+  .guest .mono { font-size: 2.1vw; letter-spacing: .1em; }
+  .guest-name { font-size: 8.6vw; line-height: 1.02; }
+  .guest-sub { font-size: 3.4vw; margin-top: 2.2vh; }
+
+  .qr-card { padding: 3.4vw; margin-top: 5vh; border-radius: 2.4vw; }
+  .qr-card img, .qr-card svg { width: 58vw; height: 58vw; }
+
+  .guest-instruction { font-size: 3.3vw; margin-top: 4.5vh; }
+  .guest-link { font-size: 1.75vw; margin-top: 1.8vh; max-width: 82vw; }
+
+  /* Deretan cuplikan tidak boleh melipat jadi dua baris — barisnya kedua
+     mendorong keterangan di bawah keluar layar, dan layar kiosk tidak digulir. */
+  .guest-strip { gap: 1.5vw; margin-top: 4.5vh; flex-wrap: nowrap; }
+  .guest-strip .photo { width: 12.6vw; border-radius: 1.2vw; }
+  .guest .small { font-size: 1.9vw; max-width: 74vw; margin-top: 3.5vh; }
+
+  /* Nama panjang mengecil sendiri, bukan melipat sampai mendorong QR turun. */
+  .guest-name.is-long { font-size: 6.6vw; }
+  .guest-name.is-verylong { font-size: 5.2vw; }
+
+  /* Sambutan: satu blok besar di tengah, tidak ada yang lain. */
+  .guest-wordmark { font-size: 9.5vw; gap: 3vw; }
+  .guest-wordmark .mark { width: 8vw; height: 8vw; flex-basis: 8vw; border-radius: 1.6vw; }
+  .guest-wordmark .mark::after { width: 2.6vw; height: 2.6vw; }
+  .guest-lead { font-size: 3.1vw; margin-top: 4vh; max-width: 78vw; }
+
+  /* Memotret: nama di atas, grid mengisi tengah, pil penjelas di bawah. */
+  .guest-shoot { max-width: none; display: flex; flex-direction: column; justify-content: center; }
+  .guest-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.8vw;
+    margin-top: 4.5vh;
+    width: 100%;
+  }
+  .guest-grid .photo { border-radius: 1.4vw; }
+  .guest-note { font-size: 2.5vw; margin-top: 5vh; padding: 1.6vh 3vw; gap: 1.6vw; }
+  .guest-note .dot { width: 1.5vw; height: 1.5vw; flex-basis: 1.5vw; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .dot-live { opacity: 1; }
+}
