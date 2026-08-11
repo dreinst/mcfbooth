@@ -9,24 +9,8 @@
 </head>
 <body>
 
-<!--
-  Halaman monitor kedua. Dirancang untuk 1920×1080 yang diputar berdiri, jadi
-  1080×1920 portrait — semua ukurannya diikat ke lebar viewport.
-
-  Tidak ada navigasi, tidak ada data sesi lain, dan tidak ada status upload:
-  antre dan gagal adalah urusan operator, bukan tamu.
-
-  Keadaannya mengikuti jendela operator. Di produksi lewat Server-Sent Events;
-  di prototipe lewat BroadcastChannel, yang butuh HTTP — buka lewat localhost,
-  bukan file://.
-
-  QR di bawah gambar contoh dan tidak bisa dipindai. Di produksi ia datang dari
-  qr_codes/<session_code>.png.
--->
-
 <div class="guest">
 
-  <!-- ============================================ 1. sambutan (belum ada sesi) -->
   <div data-variant="sambutan" class="is-on">
     <h1 class="guest-wordmark"><span class="mark"></span> MCF Photobooth</h1>
     <p class="guest-lead">
@@ -35,7 +19,6 @@
     </p>
   </div>
 
-  <!-- ====================================== 2. memotret (sesi sedang berjalan) -->
   <div data-variant="memotret" class="guest-shoot">
     <p class="mono subtle" style="margin:0 0 16px">Sedang memotret</p>
     <h1 class="guest-name" data-t-nama>&mdash;</h1>
@@ -49,7 +32,6 @@
     </p>
   </div>
 
-  <!-- ================================================= 3. QR (sesi diakhiri) -->
   <div data-variant="qr">
     <p class="mono subtle" style="margin:0 0 18px">Foto kamu sudah siap</p>
 
@@ -92,8 +74,6 @@
     return '<div class="photo' + (baru ? ' is-new' : '') + '"><span class="fill"></span></div>';
   }
 
-  // Nama tamu bisa sepanjang "Keluarga Wijaya Pratama". Ukurannya diturunkan
-  // supaya tidak melipat dan mendorong QR keluar layar.
   function pasangNama(el, nama) {
     nama = nama || '';
     el.textContent = nama;
@@ -109,8 +89,6 @@
       pasangNama(elNama, s.nama);
       elJml.textContent = s.jumlah || 0;
       var n = s.jumlah || 0;
-      // Grid dibatasi enam tile terbaru. Sesi 20 foto akan mendorong pil
-      // penjelas keluar layar, dan layar kiosk tidak boleh perlu digulir.
       var tampil = Math.min(n, 6);
       var html = '';
       for (var i = 0; i < tampil; i++) html += tile(i === tampil - 1 && n > jumlahLama);
@@ -132,8 +110,6 @@
   render(window.MCF.readState());
   window.MCF.subscribe(render);
 
-  // Layar tamu tidak boleh tidur selama jendela terbuka — bukan hanya saat QR
-  // tampil. Permintaannya diulang kalau tab sempat tersembunyi.
   var lock = null;
   function jagaTerjaga() {
     if (!('wakeLock' in navigator)) return;
