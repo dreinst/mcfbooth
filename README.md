@@ -21,7 +21,10 @@ bisa dipakai. Jangan jadwalkan acara berdasarkan dokumen ini.
 | `arsitektur-sistem-photobooth.md` | Komponen, skema database, alur data, tech stack | mau tahu bagaimana sistemnya tersusun |
 | `design.md` | Token visual, tiap layar, keadaan galat, tuntutan ke arsitektur | mau membangun tampilannya atau menilai keputusannya |
 | `prototipe/` | Lima halaman HTML yang bisa diklik, tanpa backend | mau melihat hasilnya sekarang |
-| `design md.zip` | Desain lama hasil Stitch | mau memeriksa rujukan `photobooth_*/code.html` di `design.md` |
+| `simulasi/` | Kerangka folder kerja, statis | mau melihat bentuk `tether_dropbox/` dan `local_archive/` |
+
+Desain lama hasil Stitch (`design md.zip`, 200 KB) tidak ada di repo — ia cuma dibutuhkan
+kalau kamu mau menelusuri rujukan `photobooth_*/code.html` di `design.md`.
 
 Urutan baca untuk orang baru: PRD, lalu arsitektur, lalu `design.md`. Prototipenya dibuka
 sambil membaca `design.md`.
