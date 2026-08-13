@@ -1,0 +1,10 @@
+# Langkah 1 — kerangka server dan database.
+fastapi>=0.115
+uvicorn[standard]>=0.30
+
+# httpx dipakai skrip verifikasi di uji/, bukan oleh servernya.
+httpx>=0.27
+
+# Menyusul di langkah berikutnya, sesuai tech stack arsitektur §8:
+#   langkah 2  google-api-python-client, google-auth-oauthlib, qrcode[pil]
+#   langkah 3  watchdog
