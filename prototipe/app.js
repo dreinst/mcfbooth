@@ -9,41 +9,162 @@
   var KEY = 'mcf-photobooth-state';
   var chan = ('BroadcastChannel' in window) ? new BroadcastChannel('mcf-photobooth') : null;
 
+  /* Stempel waktu ikut disiarkan supaya layar tamu bisa menolak keadaan basi.
+     Tanpa itu, membuka tamu.html keesokan harinya menampilkan nama tamu acara
+     kemarin di monitor publik sampai ada yang memulai sesi baru. */
   function publish(state) {
+    state.ts = Date.now();
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { }
     if (chan) chan.postMessage(state);
   }
+
   function readState() {
     try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; }
   }
+
+  /* Satu saluran saja. Mendaftar ke BroadcastChannel dan event storage
+     sekaligus membuat tiap publish() sampai dua kali di jendela lain.
+     Pesan tanpa `tahap` (ping/pong denyut nadi) tidak diteruskan — kalau
+     lolos, layar tamu mematikan semua variannya dan jadi kosong. */
   function subscribe(fn) {
-    if (chan) chan.onmessage = function (e) { fn(e.data); };
-    window.addEventListener('storage', function (e) {
-      if (e.key === KEY && e.newValue) fn(JSON.parse(e.newValue));
-    });
+    function teruskan(s) { if (s && s.tahap) fn(s); }
+    if (chan) {
+      chan.addEventListener('message', function (e) { teruskan(e.data); });
+    } else {
+      window.addEventListener('storage', function (e) {
+        if (e.key === KEY && e.newValue) teruskan(JSON.parse(e.newValue));
+      });
+    }
   }
 
   window.MCF = { publish: publish, readState: readState, subscribe: subscribe };
 
-  var guestWin = null;
+  /* ------------------------------------------------ denyut nadi layar tamu
+     Chip "Layar tamu terhubung" dulu berupa teks tetap — hijau meski jendela
+     tamu belum pernah dibuka. Sekarang operator mengirim ping tiap 2 detik dan
+     layar tamu menjawabnya.
+
+     Cermin di dalam iframe sengaja tidak menjawab: kalau ikut menjawab, chip
+     menyala hanya karena halaman operator memuat cuplikannya sendiri. */
+  var DI_IFRAME = (window.self !== window.top);
+
+  if (chan && document.querySelector('.guest') && !DI_IFRAME) {
+    chan.addEventListener('message', function (e) {
+      if (e.data && e.data.ping) chan.postMessage({ pong: 1 });
+    });
+  }
+
+  var chipTamu = document.querySelectorAll('[data-chip-tamu]');
+  var healthTamu = document.querySelectorAll('[data-health-tamu]');
+  var healthTamuDot = document.querySelectorAll('[data-health-tamu-dot]');
+  var pongTerakhir = 0;
+
+  function tamuHidup() { return (Date.now() - pongTerakhir) < 5000; }
+
+  function gambarChipTamu() {
+    var hidup = tamuHidup();
+    chipTamu.forEach(function (c) {
+      var pendek = c.dataset.chipTamu === 'pendek';
+      c.className = 'chip ' + (hidup ? 'chip-ok' : 'chip-idle');
+      c.innerHTML = '<span class="dot ' + (hidup ? 'dot-ok' : 'dot-idle') + '"></span> ' +
+        (hidup ? (pendek ? 'Terhubung' : 'Layar tamu terhubung')
+               : (pendek ? 'Belum dibuka' : 'Layar tamu belum dibuka'));
+    });
+    /* Baris sidebar ikut dibetulkan. Dulu tertulis "terhubung" apa adanya —
+       satu layar bisa menampilkan chip "belum dibuka" di atas dan sidebar
+       "terhubung" di bawahnya sekaligus. */
+    healthTamu.forEach(function (v) { v.textContent = hidup ? 'terhubung' : 'belum dibuka'; });
+    healthTamuDot.forEach(function (d) { d.className = 'dot ' + (hidup ? 'dot-ok' : 'dot-idle'); });
+  }
+
+  if ((chipTamu.length || healthTamu.length) && chan) {
+    chan.addEventListener('message', function (e) {
+      if (e.data && e.data.pong) { pongTerakhir = Date.now(); gambarChipTamu(); }
+    });
+    gambarChipTamu();
+    setInterval(function () { chan.postMessage({ ping: 1 }); gambarChipTamu(); }, 2000);
+  }
+
+  /* ---------------------------------------------------- jendela layar tamu */
+
   window.MCFbukaTamu = function () {
-    guestWin = window.open('tamu.html', 'mcf-tamu', 'width=540,height=960');
-    if (guestWin) guestWin.focus();
-    return guestWin;
+    var w = window.open('tamu.html', 'mcf-tamu', 'width=540,height=960');
+    if (w) w.focus();
+    return w;
   };
+
   document.querySelectorAll('[data-buka-tamu]').forEach(function (b) {
-    b.addEventListener('click', function () { window.MCFbukaTamu(); });
+    b.addEventListener('click', function () {
+      var w = window.MCFbukaTamu();
+      /* window.open mengembalikan null saat diblokir. Sebelumnya nilainya
+         dibuang: operator menekan tombol terpenting saat menyetel venue,
+         tidak terjadi apa-apa, dan tidak ada penjelasan. */
+      var pesan = b.parentNode.querySelector('[data-popup-blokir]');
+      if (!pesan) {
+        pesan = document.createElement('p');
+        pesan.className = 'btn-reason';
+        pesan.setAttribute('data-popup-blokir', '');
+        pesan.textContent = 'Browser memblokir jendela baru. Izinkan popup untuk alamat ini, lalu tekan tombol ini lagi.';
+        b.parentNode.insertBefore(pesan, b.nextSibling);
+      }
+      pesan.hidden = !!w;
+    });
   });
+
+  /* Dulu berupa onclick inline di layar-tamu.html — satu-satunya di seluruh
+     proyek, dan yang pertama pecah begitu FastAPI memasang CSP di langkah 4. */
+  document.querySelectorAll('[data-muat-cuplikan]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.mirror iframe').forEach(function (f) {
+        f.contentWindow.location.reload();
+      });
+    });
+  });
+
+  /* -------------------------------------------------------- salin ke papan klip */
+
+  var TAUTAN_FOLDER = 'https://drive.google.com/drive/folders/1aQ7vKp9XmR2LdT4';
+
+  document.querySelectorAll('[data-salin]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var semula = b.dataset.teksSemula || b.textContent;
+      b.dataset.teksSemula = semula;
+      var janji = (navigator.clipboard && navigator.clipboard.writeText)
+        ? navigator.clipboard.writeText(TAUTAN_FOLDER)
+        : Promise.reject();
+      janji.then(function () {
+        b.textContent = 'Tersalin';
+      }, function () {
+        /* clipboard butuh konteks aman: dari HP lewat IP LAN (http) API-nya
+           tidak ada sama sekali. */
+        b.textContent = 'Tidak bisa menyalin';
+      }).then(function () {
+        setTimeout(function () { b.textContent = semula; }, 1800);
+      });
+    });
+  });
+
+  /* ========================================================== halaman Sesi */
 
   var root = document.querySelector('[data-sesi]');
   if (!root) return;
 
-  var SIM = { jeda: 1700, upload: 2600, total: 12, gagalDi: [4, 8] };
+  var SIM = { jeda: 1700, upload: 2600, retry: 1400, total: 12, gagalDi: [4, 8] };
+  var AMBANG_WAIT = 90, AMBANG_BAD = 180;   // detik sejak foto terakhir masuk
+
   var simulasiGagal = true;
 
   var sesi = null;
   var foto = [];
   var tick = null, jam = null, urut = 40;
+
+  /* Semua setTimeout simulasi dicatat supaya Reset benar-benar bersih.
+     Sebelumnya handle-nya dibuang, jadi timer sesi lama tetap menyala dan
+     tetap memanggil render() setelah sesinya dibuang. */
+  var timers = [];
+  function jadwalkan(fn, ms) { timers.push(setTimeout(fn, ms)); }
+  function bersihkanTimer() { timers.forEach(clearTimeout); timers = []; }
+  function hentikanInterval() { clearInterval(tick); clearInterval(jam); tick = jam = null; }
 
   var el = {
     tahap: root.querySelectorAll('[data-tahap]'),
@@ -56,11 +177,14 @@
     nAntre: document.querySelector('[data-n-antre]'),
     nGagal: document.querySelector('[data-n-gagal]'),
     kartuGagal: document.querySelector('[data-kartu-gagal]'),
+    kartuTerakhir: document.querySelector('[data-kartu-terakhir]'),
+    chipTerakhir: document.querySelector('[data-chip-terakhir]'),
+    nTerakhir: document.querySelector('[data-n-terakhir]'),
+    labelTerakhir: document.querySelector('[data-label-terakhir]'),
+    metaTerakhir: document.querySelector('[data-meta-terakhir]'),
     pitaGagal: document.querySelector('[data-pita-gagal]'),
     daftarGagal: document.querySelector('[data-daftar-gagal]'),
     judulGagal: document.querySelector('[data-judul-gagal]'),
-    terakhir: document.querySelector('[data-terakhir]'),
-    terakhirNama: document.querySelector('[data-terakhir-nama]'),
     meter: document.querySelector('[data-meter]'),
     rasio: document.querySelector('[data-rasio]'),
     grid: document.querySelector('[data-grid]'),
@@ -76,30 +200,96 @@
   function tahap(nama) {
     el.tahap.forEach(function (n) { n.hidden = (n.dataset.tahap !== nama); });
     root.dataset.tahapAktif = nama;
+    /* Cermin di tahap yang belum tampil tidak dimuat. Iframe display:none
+       tetap mengunduh dan menjalankan halamannya — halaman operator dulu
+       menjalankan tiga salinan aplikasi sekaligus. */
+    var f = root.querySelector('[data-tahap="' + nama + '"] iframe[data-src]');
+    if (f) { f.src = f.dataset.src; f.removeAttribute('data-src'); }
   }
 
   function hitung() {
     var ok = 0, antre = 0, gagal = 0;
     foto.forEach(function (f) {
-      if (f.status === 'ok') ok++; else if (f.status === 'antre') antre++; else gagal++;
+      if (f.status === 'ok') ok++;
+      else if (f.status === 'antre') antre++;
+      else if (f.status === 'gagal') gagal++;
     });
     return { ok: ok, antre: antre, gagal: gagal, total: foto.length };
   }
 
-  function umur(ts) {
-    var d = Math.round((Date.now() - ts) / 1000);
-    if (d < 5) return 'baru saja';
-    if (d < 60) return d + ' detik lalu';
-    var m = Math.floor(d / 60);
-    return m + ' menit lalu';
-  }
+  /* \w hanya ASCII. Nama CJK atau ber-emoji dulu menyusut jadi string kosong,
+     jadi kodenya kehilangan nama sama sekali — padahal nama itulah satu-satunya
+     cara mencari sesi kalau QR-nya hilang. \p{L} mencakup semua huruf.
 
+     Detik ikut masuk. Arsitektur §3.3 menaruh `session_code` sebagai TEXT UNIQUE,
+     jadi presisi menit berarti dua tamu bernama sama yang mulai dalam menit yang
+     sama menghasilkan kode identik — INSERT-nya ditolak dan sesi kedua gagal
+     dibuat. Sesi photobooth itu beruntun; dua "Budi" dalam 60 detik bukan kasus
+     aneh. Dengan detik, tabrakan butuh dua sesi di detik yang sama persis. */
   function kodeSesi(nama) {
     var t = new Date();
     var p = function (n) { return String(n).padStart(2, '0'); };
-    return nama.trim().replace(/[^\wÀ-ÿ]+/g, '_').replace(/^_|_$/g, '') + '_' +
-      t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) + '_' + p(t.getHours()) + p(t.getMinutes());
+    var slug = nama.trim().replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/g, '');
+    if (!slug) slug = 'Tamu';
+    return slug + '_' + t.getFullYear() + p(t.getMonth() + 1) + p(t.getDate()) +
+      '_' + p(t.getHours()) + p(t.getMinutes()) + p(t.getSeconds());
   }
+
+  /* ------------------------------------------------------------- penanda waktu
+     Dipanggil tiap detik. Sengaja tidak menyentuh grid foto: menulis ulang
+     innerHTML grid tiap detik menghancurkan fokus papan ketik di tombol
+     "Coba lagi" dan, di produksi, memuat ulang tiap thumbnail 60x per menit. */
+
+  var KEADAAN_TERAKHIR = {
+    idle: ['chip-idle', 'dot-idle', 'Menunggu'],
+    ok: ['chip-ok', 'dot-live', 'Mengalir'],
+    wait: ['chip-wait', 'dot-wait', 'Periksa kamera'],
+    bad: ['chip-bad', 'dot-bad', 'Tethering putus?']
+  };
+
+  function setKeadaanTerakhir(k) {
+    var t = KEADAAN_TERAKHIR[k];
+    el.kartuTerakhir.className = 'counter counter-terakhir is-' + k;
+    el.chipTerakhir.className = 'chip ' + t[0];
+    el.chipTerakhir.innerHTML = '<span class="dot ' + t[1] + '"></span> ' + t[2];
+  }
+
+  function renderWaktu() {
+    if (sesi) {
+      var menit = Math.floor((Date.now() - sesi.mulai) / 60000);
+      el.durasi.textContent = menit < 1
+        ? 'Sesi aktif · baru dimulai'
+        : 'Sesi aktif · berjalan ' + menit + ' menit';
+    }
+
+    var last = foto[foto.length - 1];
+    if (!last) {
+      el.nTerakhir.textContent = '—';
+      el.labelTerakhir.textContent = 'Belum ada foto masuk';
+      el.metaTerakhir.textContent = 'menunggu jepretan pertama';
+      setKeadaanTerakhir('idle');
+      return;
+    }
+
+    var detik = Math.max(0, Math.round((Date.now() - last.masuk) / 1000));
+    if (detik < 60) {
+      el.nTerakhir.textContent = detik;
+      el.labelTerakhir.textContent = 'detik sejak foto terakhir';
+    } else {
+      el.nTerakhir.textContent = Math.floor(detik / 60);
+      el.labelTerakhir.textContent = 'menit sejak foto terakhir';
+    }
+
+    var k = detik >= AMBANG_BAD ? 'bad' : detik >= AMBANG_WAIT ? 'wait' : 'ok';
+    el.metaTerakhir.textContent = k === 'ok'
+      ? last.nama + '.JPG'
+      : 'kalau kamu baru menjepret, periksa kabel kamera';
+    setKeadaanTerakhir(k);
+  }
+
+  /* ------------------------------------------------------------------ render
+     Dipanggil hanya saat keadaan berubah — foto masuk, status berpindah,
+     tahap berganti. Bukan tiap detik. */
 
   function render() {
     var c = hitung();
@@ -110,8 +300,7 @@
     el.jumlahFoto.textContent = c.total + ' foto';
     el.rasio.textContent = c.ok + ' / ' + c.total;
 
-    el.kartuGagal.classList.toggle('counter-bad-live', c.gagal > 0);
-    el.kartuGagal.classList.toggle('counter-bad-zero', c.gagal === 0);
+    el.kartuGagal.className = 'counter ' + (c.gagal > 0 ? 'counter-bad-live' : 'counter-bad-zero');
     el.kartuGagal.querySelector('[data-chip-gagal]').className =
       'chip ' + (c.gagal > 0 ? 'chip-bad' : 'chip-idle');
     el.kartuGagal.querySelector('[data-chip-gagal]').innerHTML =
@@ -124,7 +313,9 @@
       .map(function (f) { return f.nama + '.JPG'; });
     el.pitaGagal.hidden = namaGagal.length === 0;
     if (namaGagal.length) {
-      el.judulGagal.textContent = namaGagal.length + ' foto gagal terupload setelah 3 percobaan';
+      el.judulGagal.textContent = namaGagal.length === 1
+        ? '1 foto gagal terupload setelah 3 percobaan'
+        : namaGagal.length + ' foto gagal terupload setelah 3 percobaan';
       el.daftarGagal.textContent = namaGagal.join(' · ');
     }
 
@@ -141,38 +332,97 @@
       '<span class="m-wait" style="width:' + pAntre + '%"></span>' +
       '<span class="m-bad" style="width:' + pGagal + '%"></span>';
 
-    el.grid.innerHTML = foto.slice().reverse().map(function (f) {
-      var s = f.status;
-      var badge = s === 'ok' ? '<span class="state s-ok">Di Drive</span>'
-        : s === 'antre' ? '<span class="state s-wait">Antre</span>' : '';
-      var bar = s === 'gagal'
-        ? '<button class="retry" type="button" data-retry="' + f.nama + '">' +
-        '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15.6 8.2A5.8 5.8 0 1 0 15.9 12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M16 4.4v3.9h-3.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
-        '<span class="retry-long">Gagal — coba lagi</span><span class="retry-short">Coba lagi</span></button>'
-        : '';
-      return '<div class="photo' + (s === 'gagal' ? ' is-bad' : s === 'antre' ? ' is-wait' : '') + '">' +
-        '<span class="fill"></span><span class="tag">' + f.nama + '</span>' + badge + bar + '</div>';
-    }).join('');
+    gambarGrid();
+    renderWaktu();
 
-    var last = foto[foto.length - 1];
-    if (last) {
-      var u = umur(last.masuk);
-      el.terakhir.textContent = u === 'baru saja' ? 'Foto terakhir baru saja masuk'
-        : 'Foto terakhir masuk ' + u;
-      el.terakhirNama.textContent = last.nama + '.JPG';
-    } else {
-      el.terakhir.textContent = 'Belum ada foto masuk';
-      el.terakhirNama.textContent = 'menunggu jepretan pertama';
+    /* Jumlah di layar QR ikut dihitung ulang. Dulu dibekukan sekali di
+       akhiri(), sementara foto yang masih antre tetap menaikkan hitungan yang
+       disiarkan ke monitor tamu — layar operator dan monitor tamu bisa
+       menampilkan angka berbeda persis di jalur "Tetap tampilkan QR". */
+    if (sesi && root.dataset.tahapAktif === 'selesai') {
+      el.qrNama.textContent = sesi.nama;
+      el.qrJumlah.textContent = c.ok;
     }
 
-    if (sesi) {
-      var menit = Math.floor((Date.now() - sesi.mulai) / 60000);
-      el.durasi.textContent = 'Sesi aktif · berjalan ' + menit + ' menit';
-    }
+    /* Dialog yang sedang terbuka ikut diperbarui. Kalau bentuknya berganti —
+       foto baru masuk saat operator membaca, atau antrean akhirnya bersih —
+       fokus dipindahkan ke tombol utama bentuk yang baru. */
+    if (sesi && el.dialog.open && isiDialog()) fokuskanUtama();
 
     siarkan();
   }
 
+  var petak = {};   // nama foto -> { el, status }
+
+  function kelasFoto(s) {
+    return 'photo' + (s === 'gagal' ? ' is-bad' : s === 'antre' ? ' is-wait' : '');
+  }
+
+  /* Nama berkas tidak pernah dirangkai ke innerHTML. Di prototipe namanya
+     buatan sendiri (IMG_00xx) jadi aman, tapi di langkah 3 nama itu datang dari
+     nama berkas di disk — dan yang menulisnya adalah digiCamControl, bukan kode
+     ini. Petaknya dicetak dari markup tetap, namanya dipasang setelahnya. */
+  function isiFoto(f) {
+    var s = f.status;
+    var badge = s === 'ok' ? '<span class="state s-ok">Di Drive</span>'
+      : s === 'antre' ? '<span class="state s-wait">Antre</span>' : '';
+    var bar = s === 'gagal'
+      ? '<button class="retry" type="button" data-retry>' +
+      '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M15.6 8.2A5.8 5.8 0 1 0 15.9 12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M16 4.4v3.9h-3.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '<span class="retry-long">Gagal — coba lagi</span><span class="retry-short">Coba lagi</span></button>'
+      : '';
+    return '<span class="fill"></span><span class="tag"></span>' + badge + bar;
+  }
+
+  function pasangNamaFoto(node, f) {
+    node.querySelector('.tag').textContent = f.nama;
+    var tombol = node.querySelector('.retry');
+    if (tombol) tombol.dataset.retry = f.nama;
+  }
+
+  /* Petak digambar sekali lalu ditambal satu per satu. Menulis ulang seluruh
+     grid tiap ada perubahan menghancurkan fokus papan ketik di tombol
+     "Coba lagi" tiap 1,7 detik — tiap kali foto berikutnya masuk — dan di
+     produksi memuat ulang tiap thumbnail yang sudah tampil. */
+  function gambarGrid() {
+    foto.forEach(function (f) {
+      var p = petak[f.nama];
+
+      if (!p) {
+        var d = document.createElement('div');
+        d.className = kelasFoto(f.status);
+        d.innerHTML = isiFoto(f);
+        pasangNamaFoto(d, f);
+        el.grid.insertBefore(d, el.grid.firstChild);   // terbaru di depan
+        petak[f.nama] = { el: d, status: f.status };
+        return;
+      }
+
+      if (p.status === f.status) return;
+
+      /* Kalau fokus sedang di dalam petak ini, ia dipindahkan ke penggantinya
+         alih-alih terlempar ke <body>. */
+      var punyaFokus = p.el.contains(document.activeElement);
+      p.el.className = kelasFoto(f.status);
+      p.el.innerHTML = isiFoto(f);
+      pasangNamaFoto(p.el, f);
+      p.status = f.status;
+
+      if (punyaFokus) {
+        var tombol = p.el.querySelector('.retry');
+        if (tombol) tombol.focus();
+        else { p.el.tabIndex = -1; p.el.focus(); }
+      }
+    });
+  }
+
+  function kosongkanGrid() { petak = {}; el.grid.innerHTML = ''; }
+
+  /* Daftar status per foto dulu ikut disiarkan dan tidak pernah dipakai —
+     tamu.html menggambar petaknya dari hitungan saja. Membiarkannya di sana
+     mengundang orang memakainya, dan design.md §5.2 melarang persis itu:
+     antre dan gagal adalah urusan operator, tamu yang membaca "2 gagal" tidak
+     punya apa pun untuk dilakukan selain cemas. */
   function siarkan() {
     if (!sesi) { publish({ tahap: 'sambutan' }); return; }
     var c = hitung();
@@ -180,107 +430,209 @@
       tahap: root.dataset.tahapAktif === 'selesai' ? 'qr' : 'memotret',
       nama: sesi.nama,
       kode: sesi.kode,
-      jumlah: root.dataset.tahapAktif === 'selesai' ? c.ok : c.total,
-      foto: foto.map(function (f) { return f.status; })
+      jumlah: root.dataset.tahapAktif === 'selesai' ? c.ok : c.total
     });
   }
+
+  /* ------------------------------------------------------------ alur simulasi */
 
   function tambahFoto() {
     if (foto.length >= SIM.total) { clearInterval(tick); tick = null; return; }
     urut++;
-    var f = { nama: 'IMG_00' + urut, status: 'antre', masuk: Date.now() };
+    var f = { nama: 'IMG_' + String(urut).padStart(4, '0'), status: 'antre', masuk: Date.now(), percobaan: 0 };
     var idx = foto.length;
     foto.push(f);
     render();
-    setTimeout(function () {
+    jadwalkan(function () {
       f.status = (simulasiGagal && SIM.gagalDi.indexOf(idx) !== -1) ? 'gagal' : 'ok';
       render();
     }, SIM.upload);
   }
 
-  function mulai() {
-    var nama = (el.nama.value || '').trim();
-    if (!nama) { el.nama.focus(); return; }
-    sesi = { nama: nama, kode: kodeSesi(nama), mulai: Date.now() };
-    foto = []; urut = 40;
-    el.judul.forEach(function (n) { n.textContent = nama; });
-    el.kode.forEach(function (n) { n.textContent = sesi.kode; });
-    el.chipSesi.hidden = false;
-    tahap('aktif');
-    render();
-    tick = setInterval(tambahFoto, SIM.jeda);
-    tambahFoto();
-    jam = setInterval(render, 1000);
+  /* Percobaan ulang pertama gagal lagi selama simulasi kegagalan menyala.
+     README menyebut kasus ini — kuota Drive habis, token kedaluwarsa — sebagai
+     yang paling sering terjadi, dan prototipe dulu tidak bisa menampilkannya
+     sama sekali karena tiap retry selalu berhasil. */
+  function cobaLagi(f) {
+    if (f.status !== 'gagal') return;
+    f.percobaan++;
+    f.status = 'antre';
+    jadwalkan(function () {
+      f.status = (simulasiGagal && f.percobaan === 1) ? 'gagal' : 'ok';
+      render();
+    }, SIM.retry);
   }
 
-  function bukaDialog() {
+  function mulai() {
+    if (sesi) return;                       // Enter ganda tidak boleh membuat dua interval
+    var nama = (el.nama.value || '').trim();
+    if (!nama) { el.nama.focus(); return; }
+
+    hentikanInterval();
+    bersihkanTimer();
+
+    sesi = { nama: nama, kode: kodeSesi(nama), mulai: Date.now() };
+    foto = []; urut = 40;
+    kosongkanGrid();
+
+    el.judul.forEach(function (n) { n.textContent = nama; });
+    el.kode.forEach(function (n) { n.textContent = sesi.kode; });
+    setChipSesi('jalan');
+    tahap('aktif');
+
+    tick = setInterval(tambahFoto, SIM.jeda);
+    jam = setInterval(renderWaktu, 1000);
+    tambahFoto();
+  }
+
+  function setChipSesi(k) {
+    if (k === 'off') { el.chipSesi.hidden = true; return; }
+    el.chipSesi.hidden = false;
+    el.chipSesi.className = 'chip ' + (k === 'jalan' ? 'chip-ok' : 'chip-idle');
+    el.chipSesi.innerHTML = k === 'jalan'
+      ? '<span class="dot dot-live"></span> Sesi berjalan'
+      : '<span class="dot dot-idle"></span> Sesi selesai';
+  }
+
+  function akhiri() {
+    /* jam ikut dihentikan. Dulu hanya tick yang dibersihkan, jadi render()
+       tetap jalan tiap detik selamanya setelah Selesai ditekan — menulis ulang
+       grid tersembunyi dan menyiarkan ulang keadaan ke layar tamu. */
+    hentikanInterval();
+    setChipSesi('selesai');
+    tahap('selesai');
+    render();
+    tutupDialog();
+  }
+
+  function reset() {
+    hentikanInterval();
+    bersihkanTimer();
+    sesi = null; foto = []; urut = 40;
+    kosongkanGrid();
+    el.nama.value = '';
+    setChipSesi('off');
+    tahap('idle');
+    render();   // menyapu penghitung, meter, pita gagal, dan menyiarkan 'sambutan'
+    /* Setelah render, karena tidak ada foto yang gagal, chip upload berbunyi
+       "Upload lancar" — padahal belum ada sesi sama sekali. */
+    el.chipUpload.className = 'chip chip-idle';
+    el.chipUpload.innerHTML = '<span class="dot dot-idle"></span> Belum ada sesi';
+    el.nama.focus();
+  }
+
+  /* ----------------------------------------------------------------- dialog
+     <dialog> + showModal() memberi focus trap, Esc, dan latar inert secara
+     bawaan. Overlay <div> sebelumnya tidak punya satu pun: Tab keluar dari
+     dialog ke sidebar di belakangnya, persis di keputusan paling berisiko
+     dalam aplikasi ini. */
+
+  /* Isi dialog ikut diperbarui selama ia terbuka. Sebelumnya isinya dibekukan
+     saat dibuka: foto yang berpindah dari "antre" ke "gagal" sementara operator
+     membaca tetap tertulis "masih diupload" — padahal seluruh keputusan di
+     dialog ini bergantung pada beda keduanya. Yang antre menyusul sendiri,
+     yang gagal tidak pernah. */
+  function isiDialog() {
     var c = hitung();
-    var berisiko = (c.antre + c.gagal) > 0;
+    var bentuk = (c.antre + c.gagal) > 0 ? 'berisiko' : 'aman';
+    var berubah = !!el.dialog.dataset.bentukAktif && el.dialog.dataset.bentukAktif !== bentuk;
+    el.dialog.dataset.bentukAktif = bentuk;
+
     el.dialog.querySelectorAll('[data-bentuk]').forEach(function (n) {
-      n.hidden = (n.dataset.bentuk !== (berisiko ? 'berisiko' : 'aman'));
+      n.hidden = (n.dataset.bentuk !== bentuk);
     });
     el.dialog.querySelectorAll('[data-d-jumlah]').forEach(function (n) { n.textContent = c.total; });
     el.dialog.querySelectorAll('[data-d-ok]').forEach(function (n) { n.textContent = c.ok; });
     el.dialog.querySelectorAll('[data-d-nama]').forEach(function (n) { n.textContent = sesi.nama; });
-    var sisa = c.antre + c.gagal;
-    el.dialog.querySelectorAll('[data-d-sisa]').forEach(function (n) { n.textContent = sisa; });
-    el.dialog.querySelector('[data-d-daftar]').innerHTML = foto
-      .filter(function (f) { return f.status !== 'ok'; })
-      .map(function (f) {
-        return '<div class="row-between" style="margin-top:8px">' +
-          '<span class="small" style="color:var(--bad-strong)">' + f.nama + '.JPG</span>' +
-          '<span class="mono" style="color:var(--bad-strong)">' +
-          (f.status === 'gagal' ? 'Gagal · 3 percobaan' : 'Masih diupload') + '</span></div>';
-      }).join('');
-    el.dialog.hidden = false;
-    el.dialog.querySelector('.btn-primary').focus();
+    el.dialog.querySelectorAll('[data-d-sisa]').forEach(function (n) {
+      n.textContent = c.antre + c.gagal;
+    });
+
+    /* Baris ini dulu tertulis "terhubung" apa adanya. Kalau monitor kedua
+       ternyata mati, dialog justru meyakinkan operator bahwa QR akan tampil. */
+    var tamu = el.dialog.querySelector('[data-d-tamu]');
+    if (tamu) {
+      tamu.textContent = tamuHidup() ? 'terhubung' : 'belum dibuka';
+      tamu.style.color = tamuHidup() ? 'var(--ok)' : 'var(--bad)';
+    }
+
+    el.dialog.setAttribute('aria-labelledby', bentuk === 'aman' ? 'judulAman' : 'judulBerisiko');
+
+    var daftar = el.dialog.querySelector('[data-d-daftar]');
+    daftar.textContent = '';
+    foto.filter(function (f) { return f.status !== 'ok'; })
+      .forEach(function (f) {
+        var baris = document.createElement('div');
+        baris.className = 'row-between';
+        baris.style.marginTop = '8px';
+
+        var berkas = document.createElement('span');
+        berkas.className = 'small';
+        berkas.style.color = 'var(--bad-strong)';
+        berkas.textContent = f.nama + '.JPG';
+
+        var keadaan = document.createElement('span');
+        keadaan.className = 'mono';
+        keadaan.style.color = 'var(--bad-strong)';
+        keadaan.textContent = f.status === 'gagal' ? 'Gagal · 3 percobaan' : 'Masih diupload';
+
+        baris.appendChild(berkas);
+        baris.appendChild(keadaan);
+        daftar.appendChild(baris);
+      });
+
+    return berubah;
   }
 
-  function tutupDialog() { el.dialog.hidden = true; el.btnSelesai.focus(); }
-
-  function akhiri() {
-    clearInterval(tick); tick = null;
-    el.dialog.hidden = true;
-    var c = hitung();
-    el.qrNama.textContent = sesi.nama;
-    el.qrJumlah.textContent = c.ok;
-    tahap('selesai');
-    siarkan();
+  /* Fokus ke tombol utama varian yang benar-benar tampil. querySelector di
+     tingkat dialog selalu mengambil milik varian "aman"; kalau varian itu yang
+     tersembunyi, focus() gagal tanpa suara dan fokus tertinggal di tombol
+     Selesai di belakang overlay. */
+  function fokuskanUtama() {
+    var aktif = el.dialog.querySelector('[data-bentuk]:not([hidden])');
+    var utama = aktif && aktif.querySelector('.btn-primary');
+    if (utama) utama.focus();
   }
 
-  function reset() {
-    clearInterval(tick); clearInterval(jam); tick = jam = null;
-    sesi = null; foto = []; el.nama.value = '';
-    el.chipSesi.hidden = true;
-    el.chipUpload.className = 'chip chip-idle';
-    el.chipUpload.innerHTML = '<span class="dot dot-idle"></span> Belum ada sesi';
-    tahap('idle');
-    publish({ tahap: 'sambutan' });
-    el.nama.focus();
+  function bukaDialog() {
+    delete el.dialog.dataset.bentukAktif;
+    isiDialog();
+    el.dialog.showModal();
+    fokuskanUtama();
   }
+
+  function tutupDialog() { if (el.dialog.open) el.dialog.close(); }
+
+  el.dialog.addEventListener('close', function () {
+    var kembali = root.dataset.tahapAktif === 'selesai'
+      ? root.querySelector('[data-sesi-baru]')
+      : el.btnSelesai;
+    if (kembali) kembali.focus();
+  });
+
+  /* ---------------------------------------------------------------- ikatan */
 
   el.mulai.addEventListener('click', mulai);
   el.nama.addEventListener('keydown', function (e) { if (e.key === 'Enter') mulai(); });
   el.btnSelesai.addEventListener('click', bukaDialog);
+
   el.dialog.addEventListener('click', function (e) {
     if (e.target.closest('[data-batal]')) tutupDialog();
     if (e.target.closest('[data-akhiri]')) akhiri();
   });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && !el.dialog.hidden) tutupDialog();
-  });
+
   root.addEventListener('click', function (e) {
     var r = e.target.closest('[data-retry]');
     if (r) {
       var f = foto.find(function (x) { return x.nama === r.dataset.retry; });
-      if (f) { f.status = 'antre'; render(); setTimeout(function () { f.status = 'ok'; render(); }, 1400); }
+      if (f) { cobaLagi(f); render(); }
+      return;
     }
     if (e.target.closest('[data-retry-semua]')) {
-      foto.filter(function (f) { return f.status === 'gagal'; }).forEach(function (f) {
-        f.status = 'antre';
-        setTimeout(function () { f.status = 'ok'; render(); }, 1400);
-      });
+      foto.filter(function (f) { return f.status === 'gagal'; })
+        .forEach(function (f) { cobaLagi(f); });
       render();
+      return;
     }
     if (e.target.closest('[data-sesi-baru]')) reset();
   });
@@ -296,5 +648,22 @@
     b.addEventListener('click', reset);
   });
 
-  publish({ tahap: 'sambutan' });
+  /* Baris ini dulu menyiarkan 'sambutan' tanpa syarat. Akibatnya monitor tamu
+     dikosongkan setiap kali halaman operator dimuat ulang — refresh tidak
+     sengaja, atau sekadar bolak-balik Riwayat → Sesi — persis saat tamu mungkin
+     sedang memindai QR-nya. design.md §5.1 justru menjanjikan sebaliknya: QR
+     bertahan sampai operator memulai sesi berikutnya.
+
+     Keadaan yang masih segar sekarang dibiarkan apa adanya. Layar tamu punya
+     pembuangan 8 jam sendiri (tamu.html) untuk sisa acara kemarin, jadi tidak
+     ada jalan bagi nama tamu lama untuk menetap di monitor publik.
+
+     Yang belum ada: pita "sesi tertinggal" dari design.md §4, yang mestinya
+     muncul di halaman operator kalau ada sesi berstatus active saat aplikasi
+     dibuka. Itu butuh database (langkah 1). Sampai saat itu halaman operator
+     memilih diam alih-alih merusak keadaan yang benar. */
+  var awal = readState();
+  var adaSesiBerjalan = awal && awal.tahap && awal.tahap !== 'sambutan' &&
+    awal.ts && (Date.now() - awal.ts) < 8 * 3600e3;
+  if (!adaSesiBerjalan) publish({ tahap: 'sambutan' });
 })();
