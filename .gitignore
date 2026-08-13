@@ -1,6 +1,5 @@
-# .DS_Store sengaja tetap dilacak — lihat commit yang mengembalikannya.
-# Isinya metadata Finder dan berubah sendiri tiap folder dibuka, jadi ia akan
-# sering muncul di git status.
+# macOS
+.DS_Store
 
 # Kredensial Google — langkah 2 rencana di README menghasilkan keduanya.
 # Jangan pernah masuk repo.
