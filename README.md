@@ -6,9 +6,13 @@ kirim manual, tidak ada tunggu sampai acara bubar.
 
 ## Status hari ini
 
-🔴 **Aplikasinya belum ada.** Yang ada di folder ini baru dokumen dan prototipe tampilan.
-Tidak ada `server.py`, tidak ada database, tidak ada koneksi ke Google Drive, tidak ada
-pemantau folder. Prototipe di `prototipe/` berjalan penuh di browser dengan data karangan.
+🟠 **Belum bisa dipakai di acara.** Langkah 1 dari lima sudah jadi: server dan database
+di `app/` menyimpan sesi dan bertahan setelah restart. Yang belum ada masih tiga —
+koneksi ke Google Drive, pemantau folder tethering, dan tampilan yang tersambung ke
+server. Foto belum tersentuh sama sekali oleh kode mana pun.
+
+Prototipe di `prototipe/` masih berdiri sendiri dengan data karangan; ia belum berbicara
+ke `app/`. Menyambungkannya adalah langkah 4.
 
 Panduan operator di bagian bawah menjelaskan sistem yang **dirancang**, bukan yang sudah
 bisa dipakai. Jangan jadwalkan acara berdasarkan dokumen ini.
@@ -20,8 +24,10 @@ bisa dipakai. Jangan jadwalkan acara berdasarkan dokumen ini.
 | `prd-sistem-photobooth.md` | Lingkup, user story, requirement, risiko | mau tahu apa yang dibangun dan apa yang sengaja tidak |
 | `arsitektur-sistem-photobooth.md` | Komponen, skema database, alur data, tech stack | mau tahu bagaimana sistemnya tersusun |
 | `design.md` | Token visual, tiap layar, keadaan galat, tuntutan ke arsitektur | mau membangun tampilannya atau menilai keputusannya |
+| `app/` | Server dan database — langkah 1, satu-satunya kode yang berjalan | mau memakai atau melanjutkan backend-nya |
 | `prototipe/` | Lima halaman HTML yang bisa diklik, tanpa backend | mau melihat hasilnya sekarang |
 | `simulasi/` | Kerangka folder kerja, statis | mau melihat bentuk `tether_dropbox/` dan `local_archive/` |
+| `uji/` | Skrip verifikasi tiap langkah | mau memastikan yang sudah jadi memang jalan |
 
 Desain lama hasil Stitch (`design md.zip`, 200 KB) tidak ada di repo — ia cuma dibutuhkan
 kalau kamu mau menelusuri rujukan `photobooth_*/code.html` di `design.md`.
@@ -31,8 +37,48 @@ sambil membaca `design.md`.
 
 ---
 
+## Menjalankan server
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m uvicorn app.server:app --reload
+```
+
+Dokumentasi endpoint yang bisa diklik ada di `http://127.0.0.1:8000/docs`. Database
+`sessions.db` dibuat sendiri di akar folder saat start pertama.
+
+Empat endpoint langkah 1, plus satu yang dibutuhkan alur "sesi tertinggal" (`design.md` §4):
+
+| | |
+|---|---|
+| `POST /api/sessions` | mulai sesi — `{"guest_name": "Budi & Ani"}` |
+| `GET /api/sessions?q=budi` | cari sesi; tanpa `q` jadi daftar Riwayat |
+| `GET /api/sessions/active` | sesi yang belum diakhiri, kalau ada |
+| `GET /api/sessions/{id}` | satu sesi |
+| `POST /api/sessions/{id}/finish` | akhiri sesi |
+
+Servernya mengikat ke `127.0.0.1`, bukan `0.0.0.0` — laptop tidak membuka port ke luar
+(arsitektur §7, PRD NFR4).
+
+Dua hal yang sengaja belum ada di sini: `drive_folder_link` dan `qr_path` selalu null
+sampai langkah 2, dan tabel `photo_uploads` sudah berdiri tapi belum ada yang mengisinya
+sampai langkah 3. Keduanya batas langkah, bukan kerusakan.
+
+Verifikasinya:
+
+```bash
+python3 uji/uji_langkah1.py
+```
+
+Skrip itu menjalankan uvicorn sungguhan di subprocess, mematikannya, lalu menjalankannya
+lagi — karena syarat selesai langkah 1 menyebut restart, dan restart hanya berarti sesuatu
+kalau prosesnya memang mati.
+
+---
+
 ## Menjalankan prototipe
 
+Prototipe belum berbicara ke server di atas; ia masih berdiri sendiri dengan data karangan.
 Butuh Python 3 (sudah ada di macOS dan Linux; di Windows pasang dari python.org).
 
 ```bash
@@ -72,14 +118,21 @@ jatuh ke font sistem. Tidak ada database — tutup tab, semuanya hilang.
 
 ## Tahapan sampai bisa dipakai
 
-Empat komponen di `arsitektur-sistem-photobooth.md` §3 belum satu pun ditulis. Urutan di
+Satu dari empat komponen di `arsitektur-sistem-photobooth.md` §3 sudah ditulis. Urutan di
 bawah menaruh yang paling berisiko lebih dulu, supaya kalau ada yang tidak bisa dikerjakan,
 ketahuannya sekarang bukan seminggu sebelum acara.
 
-**1. Kerangka server dan database.** FastAPI plus SQLite dengan dua tabel dari arsitektur
-§3.3 (`sessions`, `photo_uploads`). Endpoint minimal: buat sesi, ambil sesi, akhiri sesi,
-cari sesi. Belum menyentuh Drive maupun kamera. Selesai kalau sesi bisa dibuat lewat API
-dan masih ada setelah server di-restart.
+**1. Kerangka server dan database.** ✅ **Selesai.** FastAPI plus SQLite dengan dua tabel
+dari arsitektur §3.3, di `app/db.py` dan `app/server.py`. Syarat selesainya — sesi dibuat
+lewat API dan masih ada setelah server di-restart — diverifikasi `uji/uji_langkah1.py`.
+
+Tiga keputusan yang diambil saat menulisnya, karena dokumennya tidak menyebutkan:
+hanya boleh ada **satu sesi `active`** pada satu waktu, dan sesi kedua ditolak dengan
+409 alih-alih menutup yang lama sendiri — menutup sesi tetap keputusan manusia.
+Tabrakan `session_code` di detik yang sama diberi akhiran `_2`, bukan ditolak, karena
+operator yang menekan Mulai Sesi di tengah acara tidak boleh dapat galat. Dan hitungan
+foto diturunkan dari `photo_uploads`, bukan dibaca dari kolom `photo_count`, supaya
+angka di layar tidak bisa menyimpang dari tabel sumbernya.
 
 **2. Klien Google Drive.** OAuth dengan scope `drive.file` saja, buat folder per sesi, set
 izin *anyone with link = viewer*, upload satu berkas. Ini bagian yang paling sering

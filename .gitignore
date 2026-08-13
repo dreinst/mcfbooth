@@ -6,11 +6,18 @@
 credentials.json
 token.json
 
-# Python (menyusul bersama backend)
+# Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Data saat jalan, bukan kode. sessions.db dibuat sendiri saat server pertama
+# kali start; menaruhnya di repo berarti riwayat acara sungguhan ikut ter-push.
+sessions.db
+sessions.db-wal
+sessions.db-shm
+qr_codes/
 
 # Foto sungguhan. Kerangka contoh di simulasi/ tetap dilacak lewat pengecualian
 # di bawah; semua JPG lain — hasil jepretan nyata — tidak.
