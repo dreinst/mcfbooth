@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Layar tamu — MCF Photobooth</title>
+<title>Monitor kedua — MCF Photobooth</title>
 <link rel="icon" href="favicon mcf.jpeg">
 <link rel="stylesheet" href="ui.css">
 </head>
@@ -12,7 +12,7 @@
 <div class="guest">
 
   <div data-variant="sambutan" class="is-on">
-    <h1 class="guest-wordmark"><span class="mark"></span> MCF Photobooth</h1>
+    <h1 class="guest-wordmark"><img src="favicon mcf.jpeg" width="32" height="32" style="border-radius:6px; object-fit:cover; vertical-align:middle; margin-right:8px;" alt="Logo"> MCF Photobooth</h1>
     <p class="guest-lead">
       Silakan mendekat. Foto kamu akan muncul di layar ini, dan kode untuk
       mengunduhnya tampil setelah sesi selesai.
@@ -82,6 +82,10 @@
   }
 
   function render(s) {
+    /* Keadaan yang lebih tua dari 8 jam dibuang. Tanpa ini, membuka halaman
+       ini keesokan harinya menampilkan nama tamu acara kemarin beserta tautan
+       foldernya di monitor publik, sampai ada yang memulai sesi baru. */
+    if (s && s.ts && Date.now() - s.ts > 8 * 3600e3) s = null;
     s = s || { tahap: 'sambutan' };
     Object.keys(blok).forEach(function (k) { blok[k].classList.toggle('is-on', k === s.tahap); });
 
