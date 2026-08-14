@@ -376,6 +376,10 @@
 
   function pasangNamaFoto(node, f) {
     node.querySelector('.tag').textContent = f.nama;
+    var fill = node.querySelector('.fill');
+    if (fill && sesi) {
+      fill.style.backgroundImage = 'url("/api/thumb/' + encodeURIComponent(sesi.kode) + '/' + encodeURIComponent(f.nama) + '")';
+    }
     var tombol = node.querySelector('.retry');
     if (tombol) tombol.dataset.retry = f.nama;
   }
