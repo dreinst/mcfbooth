@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -79,7 +79,10 @@ def cari_sesi(
 def sesi_aktif():
     sesi = db.sesi_aktif()
     if sesi is None:
-        raise HTTPException(status_code=404, detail="Tidak ada sesi yang berjalan.")
+        # Lewat GalatDB, bukan HTTPException, supaya bentuk badannya sama
+        # dengan semua galat lain ({"galat", "pesan"}) — UI langkah 4 cukup
+        # punya satu parser galat.
+        raise db.GalatDB("Tidak ada sesi yang berjalan.", "tidak_ada")
     return sesi
 
 

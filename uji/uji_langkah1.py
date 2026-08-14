@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -126,7 +127,10 @@ def main() -> int:
         cek("finished_at terisi", bool(r.json()["finished_at"]), r.json()["finished_at"])
         cek("finish dua kali ditolak → 409",
             c.post(f"/api/sessions/{sesi_id}/finish").status_code == 409)
-        cek("tidak ada lagi sesi aktif", c.get("/api/sessions/active").status_code == 404)
+        r = c.get("/api/sessions/active")
+        cek("tidak ada lagi sesi aktif", r.status_code == 404, r.status_code)
+        cek("404-nya memakai bentuk galat yang sama",
+            r.json().get("galat") == "tidak_ada", r.json())
 
         print("\n== 3. Tabrakan kode sesi di detik yang sama ==")
         kode = []
@@ -137,19 +141,51 @@ def main() -> int:
         cek("tiga sesi bernama sama semuanya berhasil dibuat", len(kode) == 3, kode)
         cek("kodenya tetap unik", len(set(kode)) == 3, kode)
 
-        print("\n== 4. Nama non-ASCII tidak menyusut jadi kosong ==")
+        print("\n== 4. Klik ganda Mulai Sesi — POST serentak ==")
+        # Enam POST bersamaan atas nama yang sama. Tanpa kunci tulis di
+        # buat_sesi, lebih dari satu lolos cek 'active' — atau salah satunya
+        # pecah di UNIQUE session_code dan operator dapat 500.
+        status_race: list[int] = []
+        kunci = threading.Lock()
+
+        def tembak() -> None:
+            with httpx.Client(base_url=srv.url, timeout=10) as cc:
+                r = cc.post("/api/sessions", json={"guest_name": "Klik Ganda"})
+                with kunci:
+                    status_race.append(r.status_code)
+
+        utas = [threading.Thread(target=tembak) for _ in range(6)]
+        for t in utas:
+            t.start()
+        for t in utas:
+            t.join()
+        cek("tepat satu yang berhasil", status_race.count(201) == 1, status_race)
+        cek("sisanya 409, bukan 500", sorted(set(status_race)) == [201, 409], status_race)
+        c.post(f"/api/sessions/{c.get('/api/sessions/active').json()['id']}/finish")
+
+        print("\n== 5. Pencarian: kapital non-ASCII dan wildcard LIKE ==")
+        s = c.post("/api/sessions", json={"guest_name": "Élan Prima"}).json()
+        cek("kapital non-ASCII ketemu lewat huruf kecil",
+            c.get("/api/sessions", params={"q": "élan"}).json()["total"] == 1)
+        cek("'%' dicari sebagai huruf, bukan cocok-semua",
+            c.get("/api/sessions", params={"q": "%"}).json()["total"] == 0)
+        cek("kode sesi utuh (ber-garis-bawah) tetap bisa dicari",
+            c.get("/api/sessions", params={"q": s["session_code"]}).json()["total"] == 1)
+        c.post(f"/api/sessions/{s['id']}/finish")
+
+        print("\n== 6. Nama non-ASCII tidak menyusut jadi kosong ==")
         s = c.post("/api/sessions", json={"guest_name": "李明 🎉"}).json()
         cek("nama CJK dipertahankan di kode", s["session_code"].startswith("李明_"), s["session_code"])
         cek("nama CJK bisa dicari",
             c.get("/api/sessions", params={"q": "李明"}).json()["total"] == 1)
         c.post(f"/api/sessions/{s['id']}/finish")
 
-    print("\n== 5. Restart server — syarat selesai langkah 1 ==")
+    print("\n== 7. Restart server — syarat selesai langkah 1 ==")
     with Server(berkas_db, port_bebas()) as srv, httpx.Client(base_url=srv.url, timeout=10) as c:
         r = c.get(f"/api/sessions/{sesi_id}")
         cek("sesi masih ada setelah proses server dimatikan", r.status_code == 200, r.status_code)
         cek("isinya utuh", r.json()["guest_name"] == "Budi & Ani", r.json().get("guest_name"))
-        cek("seluruh riwayat utuh", c.get("/api/sessions").json()["total"] == 5,
+        cek("seluruh riwayat utuh", c.get("/api/sessions").json()["total"] == 7,
             c.get("/api/sessions").json()["total"])
 
     print("\n" + (f"SEMUA LULUS ({lulus})" if not gagal else f"{gagal} GAGAL, {lulus} lulus"))

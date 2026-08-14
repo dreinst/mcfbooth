@@ -78,6 +78,14 @@ def koneksi():
     dan koneksi yang berumur pendek menghindari urusan check_same_thread."""
     conn = sqlite3.connect(BERKAS_DB, timeout=10)
     conn.row_factory = sqlite3.Row
+    # LOWER() bawaan SQLite hanya mengenal A-Z; "É" dilewatkan begitu saja.
+    # Digantikan str.lower() Python supaya "élan" menemukan "Élan" — _slug()
+    # sengaja menerima semua huruf, pencariannya harus setara.
+    conn.create_function(
+        "lower", 1,
+        lambda t: t.lower() if isinstance(t, str) else t,
+        deterministic=True,
+    )
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     try:
@@ -166,6 +174,12 @@ def buat_sesi(nama_tamu: str) -> dict:
         raise GalatDB("Nama tamu tidak boleh kosong.", "nama_kosong")
 
     with koneksi() as conn:
+        # Dua POST beruntun — klik ganda di tombol Mulai Sesi — bisa sama-sama
+        # lolos cek 'active' di bawah kalau keduanya membaca sebelum salah satu
+        # menulis: jadinya dua sesi active sekaligus, atau INSERT kedua pecah
+        # di UNIQUE session_code dan operator dapat 500. BEGIN IMMEDIATE
+        # mengambil kunci tulis sebelum membaca, jadi cek-lalu-insert atomik.
+        conn.execute("BEGIN IMMEDIATE")
         # Folder Watcher mengupload ke "sesi yang sedang active" (§3.2) — bentuk
         # tunggal, dan memang cuma boleh ada satu. Sesi kedua tidak ditutup
         # otomatis: aplikasi tidak pernah memutuskan sendiri kapan sesi selesai,
@@ -219,6 +233,9 @@ def sesi_aktif() -> dict | None:
 
 def akhiri_sesi(sesi_id: int) -> dict:
     with koneksi() as conn:
+        # Alasan yang sama dengan buat_sesi: dua klik Selesai beruntun tidak
+        # boleh dua-duanya lolos cek 'done' lalu sama-sama menimpa finished_at.
+        conn.execute("BEGIN IMMEDIATE")
         baris = conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (sesi_id,)
         ).fetchone()
@@ -252,11 +269,18 @@ def cari_sesi(q: str = "", limit: int = 20, offset: int = 0) -> dict:
 
     where, arg = "", []
     if q:
-        # LIKE di SQLite tidak case-insensitive untuk non-ASCII, jadi kedua sisi
-        # diturunkan dulu. Nama tamu Indonesia jarang keluar ASCII, tapi
-        # `_slug()` sengaja menerima semua huruf — pencariannya harus setara.
-        where = "WHERE LOWER(guest_name) LIKE ? OR LOWER(session_code) LIKE ?"
-        arg = [f"%{q.lower()}%"] * 2
+        # lower() di sini fungsi Python yang didaftarkan di koneksi() — LOWER()
+        # bawaan SQLite hanya ASCII. Wildcard LIKE di-escape: kode sesi penuh
+        # garis bawah, dan '_' polos berarti "karakter apa saja", jadi mencari
+        # kode sesi tanpa escape memberi hasil palsu.
+        pola = (
+            q.lower().replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+        )
+        where = (
+            r"WHERE lower(guest_name) LIKE ? ESCAPE '\' "
+            r"OR lower(session_code) LIKE ? ESCAPE '\'"
+        )
+        arg = [f"%{pola}%"] * 2
 
     with koneksi() as conn:
         total = conn.execute(
