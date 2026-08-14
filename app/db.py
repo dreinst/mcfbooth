@@ -260,6 +260,87 @@ def akhiri_sesi(sesi_id: int) -> dict:
         return _bentuk(conn, baris)
 
 
+def simpan_drive_info(sesi_id: int, folder_id: str, folder_link: str, qr_path: str | None = None) -> None:
+    """Simpan ID folder Drive dan link ke sesi."""
+    with koneksi() as conn:
+        conn.execute(
+            "UPDATE sessions SET drive_folder_id = ?, drive_folder_link = ?, qr_path = ? WHERE id = ?",
+            (folder_id, folder_link, qr_path, sesi_id),
+        )
+
+
+def catat_foto(session_id: int, local_path: str) -> int:
+    """Catat foto baru sebagai pending. Returns foto id."""
+    with koneksi() as conn:
+        cur = conn.execute(
+            """INSERT INTO photo_uploads (session_id, local_path, status, created_at)
+               VALUES (?, ?, 'pending', ?)""",
+            (session_id, local_path, sekarang()),
+        )
+        # Update photo_count di sessions.
+        conn.execute(
+            "UPDATE sessions SET photo_count = photo_count + 1 WHERE id = ?",
+            (session_id,),
+        )
+        return cur.lastrowid
+
+
+def tandai_foto_uploaded(foto_id: int, drive_file_id: str) -> None:
+    """Tandai foto sebagai berhasil diupload."""
+    with koneksi() as conn:
+        conn.execute(
+            "UPDATE photo_uploads SET status = 'uploaded', drive_file_id = ?, uploaded_at = ? WHERE id = ?",
+            (drive_file_id, sekarang(), foto_id),
+        )
+
+
+def tandai_foto_gagal(foto_id: int) -> None:
+    """Tandai foto sebagai gagal setelah semua retry habis."""
+    with koneksi() as conn:
+        conn.execute(
+            "UPDATE photo_uploads SET status = 'failed' WHERE id = ?",
+            (foto_id,),
+        )
+
+
+def tambah_retry(foto_id: int) -> None:
+    """Tambah retry_count."""
+    with koneksi() as conn:
+        conn.execute(
+            "UPDATE photo_uploads SET retry_count = retry_count + 1 WHERE id = ?",
+            (foto_id,),
+        )
+
+
+def reset_foto_status(foto_id: int) -> None:
+    """Reset status foto ke pending untuk retry."""
+    with koneksi() as conn:
+        conn.execute(
+            "UPDATE photo_uploads SET status = 'pending', retry_count = 0 WHERE id = ?",
+            (foto_id,),
+        )
+
+
+def daftar_foto(session_id: int) -> list[dict]:
+    """Daftar foto untuk satu sesi."""
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM photo_uploads WHERE session_id = ? ORDER BY id",
+            (session_id,),
+        ).fetchall()
+        return [dict(b) for b in baris]
+
+
+def foto_terakhir(session_id: int) -> dict | None:
+    """Foto terakhir yang masuk di sesi ini."""
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM photo_uploads WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return dict(baris) if baris else None
+
+
 def cari_sesi(q: str = "", limit: int = 20, offset: int = 0) -> dict:
     """Pencarian nama tamu — jalan masuk kalau QR fisik hilang (PRD FR13).
     Tanpa `q`, ia jadi daftar Riwayat biasa: terbaru di atas."""

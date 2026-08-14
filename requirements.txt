@@ -5,6 +5,20 @@ uvicorn[standard]>=0.30
 # httpx dipakai skrip verifikasi di uji/, bukan oleh servernya.
 httpx>=0.27
 
-# Menyusul di langkah berikutnya, sesuai tech stack arsitektur §8:
-#   langkah 2  google-api-python-client, google-auth-oauthlib, qrcode[pil]
-#   langkah 3  watchdog
+# Langkah 2 — klien Google Drive dan QR generator.
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.1
+google-auth-httplib2>=0.2
+qrcode[pil]>=7.4
+
+# Langkah 3 — pemantau folder tethering.
+watchdog>=4.0
+
+# SSE untuk aliran peristiwa ke jendela tamu dan operator.
+sse-starlette>=1.6
+
+# Pillow untuk thumbnail.
+Pillow>=10.0
+
+# python-dotenv untuk konfigurasi .env.
+python-dotenv>=1.0

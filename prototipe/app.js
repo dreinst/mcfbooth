@@ -282,7 +282,7 @@
 
     var k = detik >= AMBANG_BAD ? 'bad' : detik >= AMBANG_WAIT ? 'wait' : 'ok';
     el.metaTerakhir.textContent = k === 'ok'
-      ? last.nama + '.JPG'
+      ? last.nama
       : 'kalau kamu baru menjepret, periksa kabel kamera';
     setKeadaanTerakhir(k);
   }
@@ -310,7 +310,7 @@
       c.gagal > 0 ? 'retry otomatis sudah habis' : 'semua percobaan upload berhasil';
 
     var namaGagal = foto.filter(function (f) { return f.status === 'gagal'; })
-      .map(function (f) { return f.nama + '.JPG'; });
+      .map(function (f) { return f.nama; });
     el.pitaGagal.hidden = namaGagal.length === 0;
     if (namaGagal.length) {
       el.judulGagal.textContent = namaGagal.length === 1
@@ -434,55 +434,46 @@
     });
   }
 
-  /* ------------------------------------------------------------ alur simulasi */
+  /* ------------------------------------------------------------ integrasi API nyata */
 
-  function tambahFoto() {
-    if (foto.length >= SIM.total) { clearInterval(tick); tick = null; return; }
-    urut++;
-    var f = { nama: 'IMG_' + String(urut).padStart(4, '0'), status: 'antre', masuk: Date.now(), percobaan: 0 };
-    var idx = foto.length;
-    foto.push(f);
-    render();
-    jadwalkan(function () {
-      f.status = (simulasiGagal && SIM.gagalDi.indexOf(idx) !== -1) ? 'gagal' : 'ok';
-      render();
-    }, SIM.upload);
+  function terjemahkanFoto(f_db) {
+    var nama_file = f_db.local_path.split('\\').pop().split('/').pop();
+    var st = f_db.status === 'pending' ? 'antre' : (f_db.status === 'uploaded' ? 'ok' : 'gagal');
+    return { id: f_db.id, nama: nama_file, status: st, masuk: new Date(f_db.created_at).getTime(), percobaan: f_db.retry_count };
   }
 
-  /* Percobaan ulang pertama gagal lagi selama simulasi kegagalan menyala.
-     README menyebut kasus ini — kuota Drive habis, token kedaluwarsa — sebagai
-     yang paling sering terjadi, dan prototipe dulu tidak bisa menampilkannya
-     sama sekali karena tiap retry selalu berhasil. */
   function cobaLagi(f) {
     if (f.status !== 'gagal') return;
-    f.percobaan++;
     f.status = 'antre';
-    jadwalkan(function () {
-      f.status = (simulasiGagal && f.percobaan === 1) ? 'gagal' : 'ok';
-      render();
-    }, SIM.retry);
+    render();
+    fetch('/api/photos/' + f.id + '/retry', { method: 'POST' });
   }
 
   function mulai() {
-    if (sesi) return;                       // Enter ganda tidak boleh membuat dua interval
+    if (sesi) return;
     var nama = (el.nama.value || '').trim();
     if (!nama) { el.nama.focus(); return; }
 
     hentikanInterval();
     bersihkanTimer();
 
-    sesi = { nama: nama, kode: kodeSesi(nama), mulai: Date.now() };
-    foto = []; urut = 40;
-    kosongkanGrid();
+    fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ guest_name: nama })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      sesi = { id: data.id, nama: data.guest_name, kode: data.session_code, mulai: new Date(data.started_at).getTime() };
+      foto = []; urut = 40;
+      kosongkanGrid();
 
-    el.judul.forEach(function (n) { n.textContent = nama; });
-    el.kode.forEach(function (n) { n.textContent = sesi.kode; });
-    setChipSesi('jalan');
-    tahap('aktif');
+      el.judul.forEach(function (n) { n.textContent = nama; });
+      el.kode.forEach(function (n) { n.textContent = sesi.kode; });
+      setChipSesi('jalan');
+      tahap('aktif');
 
-    tick = setInterval(tambahFoto, SIM.jeda);
-    jam = setInterval(renderWaktu, 1000);
-    tambahFoto();
+      jam = setInterval(renderWaktu, 1000);
+      render();
+    });
   }
 
   function setChipSesi(k) {
@@ -495,14 +486,14 @@
   }
 
   function akhiri() {
-    /* jam ikut dihentikan. Dulu hanya tick yang dibersihkan, jadi render()
-       tetap jalan tiap detik selamanya setelah Selesai ditekan — menulis ulang
-       grid tersembunyi dan menyiarkan ulang keadaan ke layar tamu. */
-    hentikanInterval();
-    setChipSesi('selesai');
-    tahap('selesai');
-    render();
-    tutupDialog();
+    if (!sesi) return;
+    fetch('/api/sessions/' + sesi.id + '/finish', { method: 'POST' }).then(function() {
+      hentikanInterval();
+      setChipSesi('selesai');
+      tahap('selesai');
+      render();
+      tutupDialog();
+    });
   }
 
   function reset() {
@@ -569,7 +560,7 @@
         var berkas = document.createElement('span');
         berkas.className = 'small';
         berkas.style.color = 'var(--bad-strong)';
-        berkas.textContent = f.nama + '.JPG';
+        berkas.textContent = f.nama;
 
         var keadaan = document.createElement('span');
         keadaan.className = 'mono';
@@ -629,9 +620,10 @@
       return;
     }
     if (e.target.closest('[data-retry-semua]')) {
-      foto.filter(function (f) { return f.status === 'gagal'; })
-        .forEach(function (f) { cobaLagi(f); });
+      if (!sesi) return;
+      foto.filter(function (f) { return f.status === 'gagal'; }).forEach(function(f) { f.status = 'antre'; });
       render();
+      fetch('/api/sessions/' + sesi.id + '/retry-failed', { method: 'POST' });
       return;
     }
     if (e.target.closest('[data-sesi-baru]')) reset();
@@ -648,22 +640,38 @@
     b.addEventListener('click', reset);
   });
 
-  /* Baris ini dulu menyiarkan 'sambutan' tanpa syarat. Akibatnya monitor tamu
-     dikosongkan setiap kali halaman operator dimuat ulang — refresh tidak
-     sengaja, atau sekadar bolak-balik Riwayat → Sesi — persis saat tamu mungkin
-     sedang memindai QR-nya. design.md §5.1 justru menjanjikan sebaliknya: QR
-     bertahan sampai operator memulai sesi berikutnya.
+  var sse = new EventSource('/api/peristiwa');
+  sse.onmessage = function(e) {
+    var data = JSON.parse(e.data);
+    if (data.jenis === 'foto_baru') {
+      var f = { id: data.foto_id, nama: data.nama, status: 'antre', masuk: Date.now(), percobaan: 0 };
+      foto.push(f);
+      render();
+    } else if (data.jenis === 'foto_uploaded' || data.jenis === 'foto_gagal') {
+      var target = foto.find(function(x) { return x.id === data.foto_id; });
+      if (target) {
+        target.status = data.jenis === 'foto_uploaded' ? 'ok' : 'gagal';
+        render();
+      }
+    }
+  };
 
-     Keadaan yang masih segar sekarang dibiarkan apa adanya. Layar tamu punya
-     pembuangan 8 jam sendiri (tamu.html) untuk sisa acara kemarin, jadi tidak
-     ada jalan bagi nama tamu lama untuk menetap di monitor publik.
+  fetch('/api/sessions/active').then(function(r) {
+    if(r.ok) return r.json();
+    throw new Error('no active');
+  }).then(function(data) {
+    sesi = { id: data.id, nama: data.guest_name, kode: data.session_code, mulai: new Date(data.started_at).getTime() };
+    el.judul.forEach(function (n) { n.textContent = sesi.nama; });
+    el.kode.forEach(function (n) { n.textContent = sesi.kode; });
+    setChipSesi('jalan');
+    tahap('aktif');
+    jam = setInterval(renderWaktu, 1000);
+    return fetch('/api/sessions/' + sesi.id + '/photos').then(function(r) { return r.json(); });
+  }).then(function(fotos) {
+    foto = fotos.map(terjemahkanFoto);
+    render();
+  }).catch(function(e) {
+    publish({ tahap: 'sambutan' });
+  });
 
-     Yang belum ada: pita "sesi tertinggal" dari design.md §4, yang mestinya
-     muncul di halaman operator kalau ada sesi berstatus active saat aplikasi
-     dibuka. Itu butuh database (langkah 1). Sampai saat itu halaman operator
-     memilih diam alih-alih merusak keadaan yang benar. */
-  var awal = readState();
-  var adaSesiBerjalan = awal && awal.tahap && awal.tahap !== 'sambutan' &&
-    awal.ts && (Date.now() - awal.ts) < 8 * 3600e3;
-  if (!adaSesiBerjalan) publish({ tahap: 'sambutan' });
 })();
