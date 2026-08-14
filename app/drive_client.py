@@ -133,8 +133,25 @@ def info_akun() -> dict | None:
         return None
 
 
+def cari_subfolder(parent_id: str, nama: str) -> str | None:
+    """Cari subfolder dengan nama tertentu di dalam parent."""
+    try:
+        svc = _svc()
+        if not svc: return None
+        res = svc.files().list(
+            q=f"'{parent_id}' in parents and name='{nama}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+            fields="files(id)"
+        ).execute()
+        files = res.get("files", [])
+        if files: return files[0]["id"]
+        return None
+    except Exception as e:
+        log.warning("Gagal cari subfolder %s: %s", nama, e)
+        return None
+
+
 def buat_folder_sesi(nama_folder: str) -> dict | None:
-    """Buat folder baru di Drive untuk satu sesi.
+    """Buat folder baru di Drive untuk satu sesi di dalam '2. Result'.
 
     Returns dict {"id": ..., "link": ...} atau None kalau gagal.
     """
@@ -148,7 +165,11 @@ def buat_folder_sesi(nama_folder: str) -> dict | None:
             "mimeType": "application/vnd.google-apps.folder",
         }
         if PARENT_FOLDER_ID:
-            meta["parents"] = [PARENT_FOLDER_ID]
+            result_id = cari_subfolder(PARENT_FOLDER_ID, "2. Result")
+            if result_id:
+                meta["parents"] = [result_id]
+            else:
+                meta["parents"] = [PARENT_FOLDER_ID]
 
         folder = svc.files().create(body=meta, fields="id,webViewLink").execute()
         folder_id = folder["id"]
@@ -169,7 +190,19 @@ def buat_folder_sesi(nama_folder: str) -> dict | None:
         return None
 
 
-def upload_foto(path_lokal: str, folder_id: str) -> dict | None:
+def upload_qr(qr_path: str, nama_file: str) -> dict | None:
+    """Upload QR Code ke folder '1. QR' di Drive."""
+    try:
+        if not PARENT_FOLDER_ID: return None
+        qr_folder_id = cari_subfolder(PARENT_FOLDER_ID, "1. QR")
+        if not qr_folder_id: return None
+        return upload_foto(qr_path, qr_folder_id, nama_file)
+    except Exception as e:
+        log.error("Gagal upload QR ke Drive: %s", e)
+        return None
+
+
+def upload_foto(path_lokal: str, folder_id: str, custom_name: str | None = None) -> dict | None:
     """Upload satu foto ke folder Drive.
 
     Returns dict {"id": ..., "link": ...} atau None kalau gagal.
@@ -188,7 +221,7 @@ def upload_foto(path_lokal: str, folder_id: str) -> dict | None:
 
         media = MediaFileUpload(str(path), mimetype=mime, resumable=True)
         meta = {
-            "name": path.name,
+            "name": custom_name or path.name,
             "parents": [folder_id],
         }
         berkas = svc.files().create(
