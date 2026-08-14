@@ -107,6 +107,9 @@ def buat_sesi(muatan: SesiBaru):
         # Buat QR dari link Drive.
         qr_path = qr.buat_qr(folder["link"], sesi["session_code"])
         db.simpan_drive_info(sesi["id"], folder["id"], folder["link"], qr_path)
+        # Upload QR ke Drive di folder 1. QR
+        if qr_path:
+            drive_client.upload_qr(qr_path, f"{sesi['session_code']}.png")
         # Refresh sesi dengan info Drive.
         sesi = db.ambil_sesi(sesi["id"])
         log.info("Sesi dimulai: %s → Drive: %s", sesi["session_code"], folder["link"])

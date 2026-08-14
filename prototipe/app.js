@@ -434,7 +434,9 @@
       tahap: root.dataset.tahapAktif === 'selesai' ? 'qr' : 'memotret',
       nama: sesi.nama,
       kode: sesi.kode,
-      jumlah: root.dataset.tahapAktif === 'selesai' ? c.ok : c.total
+      link: sesi.drive_folder_link,
+      jumlah: root.dataset.tahapAktif === 'selesai' ? c.ok : c.total,
+      fotos: foto.slice(-6).map(function(f) { return { nama: f.nama }; })
     });
   }
 
@@ -466,7 +468,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ guest_name: nama })
     }).then(function(r) { return r.json(); }).then(function(data) {
-      sesi = { id: data.id, nama: data.guest_name, kode: data.session_code, mulai: new Date(data.started_at).getTime() };
+      sesi = { id: data.id, nama: data.guest_name, kode: data.session_code, mulai: new Date(data.started_at).getTime(), drive_folder_link: data.drive_folder_link };
       foto = []; urut = 40;
       kosongkanGrid();
 
@@ -664,7 +666,7 @@
     if(r.ok) return r.json();
     throw new Error('no active');
   }).then(function(data) {
-    sesi = { id: data.id, nama: data.guest_name, kode: data.session_code, mulai: new Date(data.started_at).getTime() };
+    sesi = { id: data.id, nama: data.guest_name, kode: data.session_code, mulai: new Date(data.started_at).getTime(), drive_folder_link: data.drive_folder_link };
     el.judul.forEach(function (n) { n.textContent = sesi.nama; });
     el.kode.forEach(function (n) { n.textContent = sesi.kode; });
     setChipSesi('jalan');

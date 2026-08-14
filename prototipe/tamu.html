@@ -70,8 +70,9 @@
 
   var jumlahLama = 0;
 
-  function tile(baru) {
-    return '<div class="photo' + (baru ? ' is-new' : '') + '"><span class="fill"></span></div>';
+  function tile(baru, bgUrl) {
+    var bg = bgUrl ? ' style="background-image:url(\'' + bgUrl + '\')"' : '';
+    return '<div class="photo' + (baru ? ' is-new' : '') + '"><span class="fill"' + bg + '></span></div>';
   }
 
   function pasangNama(el, nama) {
@@ -93,9 +94,12 @@
       pasangNama(elNama, s.nama);
       elJml.textContent = s.jumlah || 0;
       var n = s.jumlah || 0;
-      var tampil = Math.min(n, 6);
+      var fotos = s.fotos || [];
       var html = '';
-      for (var i = 0; i < tampil; i++) html += tile(i === tampil - 1 && n > jumlahLama);
+      for (var i = 0; i < fotos.length; i++) {
+        var url = s.kode ? '/api/thumb/' + encodeURIComponent(s.kode) + '/' + encodeURIComponent(fotos[i].nama) : '';
+        html += tile(i === fotos.length - 1 && n > jumlahLama, url);
+      }
       elGrid.innerHTML = html;
       jumlahLama = n;
     }
@@ -103,9 +107,19 @@
     if (s.tahap === 'qr') {
       pasangNama(qNama, s.nama);
       qJml.textContent = s.jumlah || 0;
-      var m = Math.min(s.jumlah || 0, 6), strip = '';
-      for (var j = 0; j < m; j++) strip += tile(false);
+      var fotos = s.fotos || [];
+      var strip = '';
+      for (var j = 0; j < fotos.length; j++) {
+        var url = s.kode ? '/api/thumb/' + encodeURIComponent(s.kode) + '/' + encodeURIComponent(fotos[j].nama) : '';
+        strip += tile(false, url);
+      }
       qStrip.innerHTML = strip;
+      
+      var qrImg = document.querySelector('.qr-card img');
+      if (qrImg && s.kode) qrImg.src = '/api/qr/' + s.kode;
+      
+      var dLink = document.querySelector('.guest-link');
+      if (dLink && s.link) dLink.textContent = s.link.replace(/^https?:\/\//, '');
     }
 
     if (s.tahap === 'sambutan') jumlahLama = 0;
