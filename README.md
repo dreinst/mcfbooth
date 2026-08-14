@@ -37,7 +37,56 @@ sambil membaca `design.md`.
 
 ---
 
+## Instalasi di Windows
+
+Target produksi sistem ini memang Windows — digiCamControl dan Imaging Edge hanya ada
+di sana, dan panduan operator di bawah memakai pengaturan tampilan Windows. Yang perlu
+dipasang cuma Python dan Git; sisanya ikut lewat `pip`.
+
+1. Pasang **Python 3.11 atau lebih baru** dari [python.org](https://www.python.org/downloads/).
+   Di layar pertama installer, centang **"Add python.exe to PATH"** — tanpa ini perintah
+   `py`/`python` tidak dikenal di terminal.
+2. Pasang **Git for Windows** dari [git-scm.com](https://git-scm.com/download/win)
+   (pengaturan bawaan semua oke). Kalau tidak mau memasang Git, unduh ZIP repo dari
+   GitHub (Code → Download ZIP) lalu ekstrak — langkah 3 tinggal `cd` ke folder hasilnya.
+3. Buka PowerShell:
+
+   ```powershell
+   git clone https://github.com/dreinst/mcfbooth.git
+   cd mcfbooth
+   py -m pip install -r requirements.txt
+   ```
+
+4. Jalankan dan verifikasi dari folder itu:
+
+   ```powershell
+   py -m uvicorn app.server:app --reload    # server → http://127.0.0.1:8000/docs
+   py uji/uji_langkah1.py                   # 32 uji, semuanya harus lulus
+   ```
+
+   Untuk prototipe, di jendela PowerShell kedua:
+
+   ```powershell
+   cd prototipe
+   py -m http.server 8080                   # → http://localhost:8080/
+   ```
+
+`py` adalah peluncur Python bawaan Windows; kalau tidak ada, ganti semua `py` dengan
+`python`. Server mengikat ke `127.0.0.1`, jadi Windows Firewall tidak bertanya apa-apa.
+Yang memunculkan dialog firewall hanya `http.server` prototipe kalau mau dibuka dari HP —
+izinkan untuk jaringan Private saja.
+
+**Pindah dari laptop lama.** Kode dan dokumen lewat GitHub. Dua hal yang sengaja tidak
+ikut ter-push dan harus dibawa manual (USB/drive pribadi) kalau memang dibutuhkan:
+`sessions.db` (riwayat sesi — biarkan saja kalau mau mulai bersih) dan, mulai langkah 2,
+`credentials.json` + `token.json` (kredensial Google — tidak boleh lewat GitHub, lihat
+seksi Google Drive di bawah).
+
+---
+
 ## Menjalankan server
+
+Di macOS/Linux (di Windows lihat seksi instalasi di atas):
 
 ```bash
 python3 -m pip install -r requirements.txt
@@ -46,6 +95,10 @@ python3 -m uvicorn app.server:app --reload
 
 Dokumentasi endpoint yang bisa diklik ada di `http://127.0.0.1:8000/docs`. Database
 `sessions.db` dibuat sendiri di akar folder saat start pertama.
+
+Port bakunya **8000** — semua contoh di dokumen ini memakainya. Kalau di mesinmu port
+8000 sedang dipakai proses lain, tambahkan `--port 8001` (atau port bebas lain) dan baca
+semua contoh dengan port itu; tidak ada yang perlu diubah di kode.
 
 Empat endpoint langkah 1, plus satu yang dibutuhkan alur "sesi tertinggal" (`design.md` §4):
 
@@ -151,9 +204,91 @@ retry per foto, halaman layar tamu, dan aliran SSE.
 **5. Uji lapangan.** Satu acara kecil dulu dengan tiga lapis backup aktif, bukan langsung
 acara besar.
 
-Sebelum langkah 2, siapkan proyek di Google Cloud Console dan unduh `credentials.json`.
-Sebelum langkah 3, verifikasi kamera yang dipakai memang didukung digiCamControl —
-PRD §12 menyebut ini sebagai risiko, dan mengeceknya lima menit.
+Persiapan untuk langkah 2 dan 3 tidak butuh kode dan bisa dicicil sekarang — rinciannya
+di dua seksi berikut.
+
+---
+
+## Persiapan Google Drive — dipakai mulai langkah 2
+
+Langkah 2 belum ditulis; seksi ini menyiapkan bahannya supaya begitu kodenya ada,
+tinggal jalan. Semuanya gratis untuk skala photobooth.
+
+### Kredensial (`credentials.json`)
+
+1. Buka [console.cloud.google.com](https://console.cloud.google.com), buat proyek baru —
+   nama bebas, misalnya `mcf-photobooth`.
+2. **APIs & Services → Library**, cari **Google Drive API**, tekan **Enable**.
+3. **APIs & Services → OAuth consent screen**: pilih External, isi nama aplikasi dan
+   email. Di bagian **Test users**, tambahkan alamat Gmail akun Drive yang akan
+   menampung foto. Aplikasi tidak perlu diverifikasi Google — mode testing cukup,
+   karena pemakainya hanya akun itu sendiri.
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID**, jenis
+   **Desktop app**. Unduh JSON-nya, taruh di akar folder proyek dengan nama
+   `credentials.json`.
+
+`credentials.json` dan `token.json` (dibuat otomatis saat login pertama) sudah masuk
+`.gitignore` — keduanya tidak akan pernah ikut ter-push, dan memang tidak boleh. Pindah
+laptop berarti menyalinnya lewat USB/drive pribadi, bukan lewat GitHub.
+
+Scope yang dipakai `drive.file` saja: aplikasi hanya bisa melihat folder dan berkas
+yang ia buat sendiri, bukan seluruh isi Drive (arsitektur §7).
+
+### ID folder Drive
+
+Folder per sesi dibuat otomatis oleh aplikasi saat operator menekan Mulai Sesi
+(arsitektur §3.2) — tidak ada yang perlu dibuat satu-satu. Yang bisa kamu tentukan
+adalah **folder induknya**, supaya semua sesi terkumpul di satu tempat, misalnya
+`MCF Photobooth/`. Buat foldernya di Drive, buka di browser, dan ID-nya ada di URL:
+
+```
+https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz12345
+                                       └──────────── ini ID-nya ───────┘
+```
+
+Simpan ID itu — di langkah 2 ia masuk konfigurasi sebagai folder induk. Kalau kosong,
+folder sesi dibuat di akar Drive; fungsinya sama, cuma kurang rapi.
+
+---
+
+## Integrasi kamera — Sony a6000, dipakai mulai langkah 3
+
+Pemantau folder (langkah 3) tidak peduli aplikasi tethering apa yang dipakai — ia hanya
+memantau berkas yang jatuh ke `tether_dropbox/`. Integrasi kamera berarti satu hal:
+jepretan a6000 harus mendarat ke folder itu secara otomatis. Struktur foldernya bisa
+dilihat di `simulasi/`.
+
+### Jalur utama: Imaging Edge Desktop (aplikasi resmi Sony, Windows)
+
+1. Pasang **Imaging Edge Desktop** dari situs Sony, buka modul **Remote**.
+2. Di kamera: **Menu → Setup → USB Connection → PC Remote**.
+3. Sambungkan a6000 ke laptop lewat USB; kamera muncul di Remote.
+4. Di Remote, arahkan folder penyimpanan ke folder yang akan dipantau aplikasi
+   (`tether_dropbox/`).
+5. Jepret sekali. Berkas muncul di folder itu → integrasi beres; sisanya urusan
+   pemantau folder di langkah 3.
+
+**Verifikasi sendiri, jangan percaya dokumen ini**: a6000 bodi keluaran 2014, dan
+daftar kamera yang didukung Imaging Edge Remote berubah antar versi. Colok dan coba —
+lima menit — sebelum ada kode yang dibangun di atasnya. PRD §12 memang menaruh dukungan
+tethering sebagai risiko nomor satu.
+
+### Kalau jalur utama gagal
+
+- **digiCamControl** (yang disebut arsitektur §3.2): dukungan Sony-nya eksperimental —
+  layak dicoba, jangan diandalkan sebelum terbukti.
+- **qDslrDashboard** mendukung sebagian bodi Sony.
+- Wifi bawaan a6000 tidak dipakai: lambat dan gampang putus di venue yang ramai sinyal.
+
+### Setelan kamera yang disarankan
+
+- Format **JPEG** (atau RAW+JPEG kalau RAW-nya mau tetap di kartu SD). Yang diupload
+  JPEG — RAW 24 MP a6000 sekitar 24 MB per berkas dan membuat antrean upload panjang
+  di wifi venue.
+- Auto power-off dimatikan atau diatur selonggar mungkin — kamera yang tidur memutus
+  tethering di tengah sesi.
+- Baterai dummy / AC adapter untuk acara panjang; tethering menguras baterai jauh lebih
+  cepat dari pemakaian biasa.
 
 ---
 
