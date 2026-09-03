@@ -22,6 +22,20 @@ Dua hal yang hanya bisa dibuktikan di lapangan, dan harus dicoba **sebelum** aca
    sementara lalu rename) baru ketahuan dengan kamera terpasang. Keduanya ditangani, tapi
    colok dan coba lima menit lebih dulu.
 
+## Yang harus kamu isi sendiri
+
+Tiga berkas ini sengaja tidak ada di repo dan tidak akan pernah ikut ter-push (`.gitignore`).
+Tanpa ketiganya aplikasi tetap jalan untuk dicoba, tapi foto tidak akan sampai ke Drive.
+
+| Berkas | Isi | Cara mendapatkannya |
+|---|---|---|
+| `.env` | konfigurasi: label kamera, folder, nama folder Drive | `copy .env.example .env` lalu ubah yang perlu — bawaannya sudah bisa dipakai |
+| `credentials.json` | OAuth client (jenis **Desktop app**) dari Google Cloud Console | seksi **Persiapan Google Drive → Kredensial** di bawah; taruh di akar folder repo |
+| `token.json` | token akun Drive yang menampung foto | dibuat otomatis oleh tombol **Pengaturan → Login Google**; jangan dibuat manual |
+
+Urutannya: pasang, salin `.env`, taruh `credentials.json`, jalankan server, buka Pengaturan,
+tekan Login Google. Setelah itu baris Google Drive di pemeriksaan awal hijau.
+
 ## Isi folder
 
 | Berkas | Isi | Baca kalau |
