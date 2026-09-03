@@ -1,8 +1,8 @@
-"""Verifikasi langkah 1.
+"""Verifikasi sesi dan pencarian.
 
-README menaruh satu syarat selesai: "sesi bisa dibuat lewat API dan masih ada
-setelah server di-restart". Skrip ini menagihnya secara harfiah — servernya
-benar-benar dijalankan, dimatikan, lalu dijalankan lagi.
+Syarat dasarnya: sesi bisa dibuat lewat API dan masih ada setelah server
+di-restart. Skrip ini menagihnya secara harfiah — servernya benar-benar
+dijalankan, dimatikan, lalu dijalankan lagi.
 
     python3 uji/uji_langkah1.py
 """

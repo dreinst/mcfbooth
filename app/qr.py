@@ -17,8 +17,9 @@ from qrcode.constants import ERROR_CORRECT_H
 
 log = logging.getLogger(__name__)
 
-AKAR = Path(__file__).resolve().parent.parent
-QR_DIR = Path(os.environ.get("QR_CODES", AKAR / "qr_codes"))
+from .jalur import AKAR, path_env
+
+QR_DIR = path_env("QR_CODES", AKAR / "qr_codes")
 
 
 def siapkan() -> None:
@@ -45,7 +46,9 @@ def buat_qr(link: str, session_code: str) -> str | None:
         qr.make(fit=True)
 
         img = qr.make_image(fill_color="black", back_color="white")
-        img.save(str(path))
+        tmp = path.with_suffix(".tmp")
+        img.save(str(tmp), format="PNG")
+        os.replace(tmp, path)
 
         log.info("QR dibuat: %s → %s", session_code, path)
         return str(path)

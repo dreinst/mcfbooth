@@ -2,43 +2,44 @@
 
 Server utama MCF Photobooth. Menghubungkan:
   - Database SQLite (db.py)
-  - Google Drive client (drive_client.py)
+  - Klien Google Drive (drive_client.py)
   - Folder Watcher (watcher.py)
   - QR Generator (qr.py)
-  - SSE event bus (peristiwa.py)
+  - Bus peristiwa SSE (peristiwa.py)
 
-Kamera Sony ZV-E10 disambung via Imaging Edge Desktop ke tether_dropbox/.
+Tampilan operator dan layar tamu disajikan dari folder `web/` di root.
 
 Jalankan:
-    py -m uvicorn app.server:app --reload
+    py -m uvicorn app.server:app
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import os
 import shutil
-import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 # Muat .env sebelum import modul lain supaya environment variables tersedia.
-AKAR = Path(__file__).resolve().parent.parent
+from .jalur import AKAR, env_bool, path_env  # noqa: E402
+
 load_dotenv(AKAR / ".env")
 
-from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from sse_starlette.sse import EventSourceResponse
+from fastapi import FastAPI, Query, Request  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
+from sse_starlette.sse import EventSourceResponse  # noqa: E402
 
-from . import db
-from . import drive_client
-from . import qr
-from . import watcher
-from . import peristiwa
+from . import db, drive_client, peristiwa, qr, watcher  # noqa: E402
+
+VERSI = "1.1.0"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,25 +47,39 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+KAMERA = os.environ.get("CAMERA_MODEL", "Sony ZV-E10")
+TETHERING_APP = os.environ.get("TETHERING_APP", "Imaging Edge Desktop")
+IZINKAN_TANPA_DRIVE = env_bool("MCF_IZINKAN_TANPA_DRIVE", False)
+THUMBS_DIR = watcher.THUMBS_DIR
+QR_DIR = qr.QR_DIR
+WEB_DIR = AKAR / "web"
+
 # Galat yang sudah diduga dipetakan ke kode status di satu tempat.
 STATUS = {
     "nama_kosong": 422,
     "tidak_ada": 404,
     "sesi_masih_aktif": 409,
     "sudah_selesai": 409,
+    "sudah_terupload": 409,
+    "sedang_diupload": 409,
+    "berkas_hilang": 410,
+    "drive_tidak_siap": 503,
 }
 
 
 @asynccontextmanager
 async def daur_hidup(app: FastAPI):
     db.siapkan()
+    qr.siapkan()
     watcher.mulai()
-    log.info("=== MCF Photobooth dimulai ===")
-    log.info("Kamera: %s via %s",
-             os.environ.get("CAMERA_MODEL", "Sony ZV-E10"),
-             os.environ.get("TETHERING_APP", "Imaging Edge Desktop"))
-    log.info("Tether dropbox: %s", os.environ.get("TETHER_DROPBOX", "tether_dropbox/"))
-    log.info("Drive parent folder: %s", os.environ.get("DRIVE_PARENT_FOLDER_ID", "(tidak diset)"))
+    log.info("=== MCF Photobooth %s dimulai ===", VERSI)
+    log.info("Kamera: %s via %s", KAMERA, TETHERING_APP)
+    log.info("Tether dropbox: %s", watcher.TETHER_DIR)
+    log.info("Arsip lokal: %s", watcher.ARCHIVE_DIR)
+    log.info("Folder induk Drive: %s", drive_client.PARENT_FOLDER_ID or "(dibuat aplikasi)")
+    if drive_client.PALSU:
+        log.warning("MODE UJI: Google Drive digantikan tiruan dalam memori (MCF_DRIVE_PALSU=1).")
+    await asyncio.get_running_loop().run_in_executor(None, watcher.pulihkan)
     yield
     watcher.berhenti()
     log.info("=== MCF Photobooth dihentikan ===")
@@ -72,10 +87,24 @@ async def daur_hidup(app: FastAPI):
 
 app = FastAPI(
     title="MCF Photobooth — Session Manager",
-    version="0.2.0",
-    summary="Sistem photobooth otomatis dengan Google Drive, folder watcher, dan Sony ZV-E10.",
+    version=VERSI,
+    summary="Sistem photobooth otomatis: tethering kamera, Google Drive, QR untuk tamu.",
     lifespan=daur_hidup,
 )
+
+
+@app.middleware("http")
+async def tolak_lintas_situs(request: Request, call_next):
+    """Aplikasi tidak punya login, jadi Origin adalah satu-satunya pagar:
+    halaman web lain yang dibuka di laptop yang sama tidak boleh bisa mengakhiri
+    sesi atau menghapus token lewat POST lintas situs."""
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        asal = request.headers.get("origin")
+        host = request.headers.get("host", "")
+        situs = request.headers.get("sec-fetch-site", "")
+        if situs == "cross-site" or (asal and asal.split("://", 1)[-1] != host):
+            return JSONResponse(status_code=403, content={"galat": "lintas_situs", "pesan": "Permintaan dari situs lain ditolak."})
+    return await call_next(request)
 
 
 @app.exception_handler(db.GalatDB)
@@ -98,30 +127,12 @@ class SesiBaru(BaseModel):
 
 @app.post("/api/sessions", status_code=201)
 def buat_sesi(muatan: SesiBaru):
-    """Mulai Sesi. Folder Drive dibuat, izin diset, dan QR disiapkan."""
+    """Mulai Sesi. Sesi tercatat seketika; folder Drive, izin, dan QR dipasang
+    di latar dan diumumkan lewat peristiwa `sesi_drive_terpasang` — wifi venue
+    yang lambat tidak boleh membuat tombol Mulai Sesi menggantung."""
     sesi = db.buat_sesi(muatan.guest_name)
-
-    # Buat folder di Drive.
-    folder = drive_client.buat_folder_sesi(sesi["session_code"])
-    if folder:
-        # Buat QR dari link Drive.
-        qr_path = qr.buat_qr(folder["link"], sesi["session_code"])
-        db.simpan_drive_info(sesi["id"], folder["id"], folder["link"], qr_path)
-        # Upload QR ke Drive di folder 1. QR
-        if qr_path:
-            drive_client.upload_qr(qr_path, f"{sesi['session_code']}.png")
-        # Refresh sesi dengan info Drive.
-        sesi = db.ambil_sesi(sesi["id"])
-        log.info("Sesi dimulai: %s → Drive: %s", sesi["session_code"], folder["link"])
-    else:
-        log.warning("Sesi dimulai tanpa folder Drive: %s", sesi["session_code"])
-
-    # Kirim peristiwa SSE.
-    peristiwa.kirim({
-        "jenis": "sesi_mulai",
-        "sesi": sesi,
-    })
-
+    peristiwa.kirim({"jenis": "sesi_mulai", "sesi": sesi})
+    watcher.pasang_drive_latar(sesi)
     return sesi
 
 
@@ -135,13 +146,34 @@ def cari_sesi(
     return db.cari_sesi(q, limit, offset)
 
 
-# Harus di atas /{sesi_id} — kalau tidak, "active" ditelan sebagai id.
+# Rute statis harus di atas /{sesi_id} — kalau tidak, ditelan sebagai id.
+
+
 @app.get("/api/sessions/active")
 def sesi_aktif():
     sesi = db.sesi_aktif()
     if sesi is None:
         raise db.GalatDB("Tidak ada sesi yang berjalan.", "tidak_ada")
     return sesi
+
+
+@app.get("/api/sessions/ringkasan")
+def ringkasan_sesi():
+    return db.ringkasan_riwayat()
+
+
+@app.get("/api/sessions/nama-serupa")
+def nama_serupa(q: str = Query("", max_length=120)):
+    """Berapa sesi hari ini memakai nama yang sama — keterangan di input nama."""
+    return {"jumlah": db.nama_serupa_hari_ini(q)}
+
+
+@app.post("/api/sessions/bersiap")
+def bersiap():
+    """Operator mulai mengetik nama tamu berikutnya: tenggang setelah Selesai
+    dibatalkan supaya jepretan uji tidak masuk ke folder tamu sebelumnya."""
+    watcher.batalkan_tenggang()
+    return {"ok": True}
 
 
 @app.get("/api/sessions/{sesi_id}")
@@ -153,209 +185,411 @@ def ambil_sesi(sesi_id: int):
 def akhiri_sesi(sesi_id: int):
     """Selesai. QR ditampilkan di monitor tamu."""
     sesi = db.akhiri_sesi(sesi_id)
-
-    # Kirim peristiwa SSE.
-    peristiwa.kirim({
-        "jenis": "sesi_selesai",
-        "sesi": sesi,
-    })
-
+    sesi = watcher.pastikan_qr(sesi)
+    peristiwa.kirim({"jenis": "sesi_selesai", "sesi": sesi})
     return sesi
+
+
+@app.post("/api/sessions/{sesi_id}/drive")
+def pasang_drive_sesi(sesi_id: int):
+    """Pasang folder Drive + QR ke sesi yang dimulai saat Drive putus, lalu
+    antrekan foto yang sudah menunggu."""
+    sesi = db.ambil_sesi(sesi_id)
+    hasil = watcher.pasang_drive(sesi)
+    if not hasil or not hasil.get("drive_folder_id"):
+        raise db.GalatDB("Drive belum bisa dijangkau. Periksa sambungan di Pengaturan.", "drive_tidak_siap")
+    return hasil
+
+
+@app.post("/api/sessions/{sesi_id}/tampilkan-qr")
+def tampilkan_qr(sesi_id: int):
+    """Riwayat → Tampilkan QR: monitor tamu menampilkan QR sesi ini sampai
+    sesi berikutnya dimulai atau dibatalkan lewat DELETE /api/tampilan-tamu/qr."""
+    sesi = db.ambil_sesi(sesi_id)
+    if not sesi.get("drive_folder_link"):
+        raise db.GalatDB("Sesi ini belum punya folder Drive, jadi belum ada QR.", "drive_tidak_siap")
+    if db.sesi_aktif():
+        raise db.GalatDB("Masih ada sesi berjalan — akhiri dulu sebelum menampilkan QR lama.", "sesi_masih_aktif")
+    watcher.pastikan_qr(sesi)
+    db.simpan_pengaturan("paksa_sambutan", None)
+    db.simpan_pengaturan("tampilkan_qr_sesi_id", str(sesi_id))
+    peristiwa.kirim({"jenis": "tampilan_tamu", "tampilan": tampilan_tamu()})
+    return {"ok": True, "sesi": sesi}
+
+
+@app.delete("/api/tampilan-tamu/qr")
+def kembali_ke_sambutan():
+    """Batalkan QR dari Riwayat dan paksa monitor tamu ke layar sambutan
+    sampai sesi berikutnya dimulai."""
+    db.simpan_pengaturan("tampilkan_qr_sesi_id", None)
+    db.simpan_pengaturan("paksa_sambutan", "1")
+    peristiwa.kirim({"jenis": "tampilan_tamu", "tampilan": tampilan_tamu()})
+    return {"ok": True}
+
+
+@app.post("/api/tanpa-sesi/akui")
+def akui_tanpa_sesi():
+    """Operator sudah membaca pita "foto masuk saat tidak ada sesi"."""
+    watcher.akui_tanpa_sesi()
+    return {"ok": True, "foto_tanpa_sesi": watcher.jumlah_tanpa_sesi()}
 
 
 # --------------------------------------------------------------- Foto
 
 
+def _bentuk_foto(f: dict) -> dict:
+    d = dict(f)
+    d["nama"] = Path(f["local_path"]).name
+    d["thumb"] = watcher.nama_thumb(f["local_path"])
+    return d
+
+
 @app.get("/api/sessions/{sesi_id}/photos")
 def daftar_foto(sesi_id: int):
     """Daftar foto satu sesi dengan status per foto."""
-    return db.daftar_foto(sesi_id)
+    db.ambil_sesi(sesi_id)
+    return [_bentuk_foto(f) for f in db.daftar_foto(sesi_id)]
 
 
 @app.get("/api/sessions/{sesi_id}/foto-terakhir")
 def foto_terakhir(sesi_id: int):
-    """Foto terakhir yang masuk di sesi ini."""
     f = db.foto_terakhir(sesi_id)
     if f is None:
         raise db.GalatDB("Belum ada foto di sesi ini.", "tidak_ada")
-    return f
+    return _bentuk_foto(f)
 
 
 @app.post("/api/photos/{foto_id}/retry")
 def retry_foto(foto_id: int):
-    """Retry upload satu foto yang gagal."""
-    ok = watcher.retry_foto(foto_id)
+    """Upload ulang satu foto yang gagal (atau menggantung)."""
+    ok, alasan = watcher.retry_foto(foto_id)
     if not ok:
-        raise db.GalatDB("Foto tidak ditemukan atau tidak bisa di-retry.", "tidak_ada")
+        pesan = {
+            "tidak_ada": "Foto tidak ditemukan.",
+            "sudah_terupload": "Foto ini sudah ada di Drive.",
+            "sedang_diupload": "Foto ini sedang diupload.",
+            "berkas_hilang": "Berkas aslinya tidak ada lagi di arsip lokal.",
+        }.get(alasan, "Tidak bisa di-retry.")
+        raise db.GalatDB(pesan, alasan)
     return {"ok": True}
 
 
 @app.post("/api/sessions/{sesi_id}/retry-failed")
 def retry_semua_gagal(sesi_id: int):
-    """Retry semua foto gagal dari satu sesi."""
-    jumlah = watcher.retry_semua_gagal(sesi_id)
-    return {"ok": True, "jumlah_retry": jumlah}
+    """Upload ulang semua foto gagal/menggantung dari satu sesi."""
+    db.ambil_sesi(sesi_id)
+    return watcher.retry_semua_gagal(sesi_id)
 
 
-# --------------------------------------------------------------- Thumbnail
+# --------------------------------------------------------------- Berkas
 
 
-THUMBS_DIR = Path(os.environ.get("THUMBS", AKAR / "thumbs"))
+def _berkas_aman(dasar: Path, *bagian: str) -> Path | None:
+    """Path di bawah `dasar`, ditolak kalau ada yang mencoba keluar darinya
+    atau membawa karakter yang tidak mungkin ada di nama berkas."""
+    if any((not b) or ("\x00" in b) or ("/" in b) or ("\\" in b) for b in bagian):
+        return None
+    try:
+        calon = dasar.joinpath(*bagian).resolve()
+        calon.relative_to(dasar)
+        return calon if calon.is_file() else None
+    except (ValueError, OSError):
+        return None
 
 
 @app.get("/api/thumb/{session_code}/{filename}")
 def ambil_thumb(session_code: str, filename: str):
-    """Thumbnail foto dari local_archive."""
-    thumb = THUMBS_DIR / session_code / filename
-    if thumb.exists():
-        return FileResponse(str(thumb), media_type="image/jpeg")
-    raise db.GalatDB("Thumbnail tidak ditemukan.", "tidak_ada")
-
-
-# --------------------------------------------------------------- QR Code
-
-
-QR_DIR = Path(os.environ.get("QR_CODES", AKAR / "qr_codes"))
+    """Thumbnail foto dari thumbs/<session_code>/<nama>.jpg."""
+    thumb = _berkas_aman(THUMBS_DIR, session_code, filename)
+    if thumb is None:
+        # Nama asli (IMG_0041.JPG) juga diterima — thumbnail selalu .jpg.
+        thumb = _berkas_aman(THUMBS_DIR, session_code, Path(filename).stem + ".jpg")
+    if thumb is None:
+        raise db.GalatDB("Thumbnail tidak ditemukan.", "tidak_ada")
+    return FileResponse(str(thumb), media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/api/qr/{session_code}")
 def ambil_qr(session_code: str):
-    """QR code gambar untuk satu sesi."""
-    qr_path = QR_DIR / f"{session_code}.png"
-    if qr_path.exists():
-        return FileResponse(str(qr_path), media_type="image/png")
-    raise db.GalatDB("QR code tidak ditemukan.", "tidak_ada")
+    qr_path = _berkas_aman(QR_DIR, f"{session_code}.png")
+    if qr_path is None:
+        # PNG hilang (pindah laptop) tapi tautannya ada di DB: buat lagi.
+        sesi = db.sesi_dari_kode(session_code)
+        if sesi and sesi.get("drive_folder_link"):
+            watcher.pastikan_qr(sesi)
+            qr_path = _berkas_aman(QR_DIR, f"{session_code}.png")
+    if qr_path is None:
+        raise db.GalatDB("QR code tidak ditemukan.", "tidak_ada")
+    return FileResponse(str(qr_path), media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=3600"})
 
 
 # --------------------------------------------------------------- Preflight
 
+_cache_struktur: tuple[float, dict | None] = (0.0, None)
+
+
+def _struktur_drive(terhubung: bool) -> dict | None:
+    global _cache_struktur
+    if not terhubung:
+        return None
+    if time.time() - _cache_struktur[0] < 60 and _cache_struktur[1]:
+        return _cache_struktur[1]
+    struktur = drive_client.pastikan_struktur()
+    _cache_struktur = (time.time(), struktur)
+    return struktur
+
+
+def _gb(n: int | None) -> float | None:
+    return round(n / (1024 ** 3), 1) if isinstance(n, (int, float)) else None
+
 
 @app.get("/api/preflight")
 def pemeriksaan_awal():
-    """Pemeriksaan awal sebelum sesi dimulai."""
-    drive_ok = drive_client.terhubung()
-    drive_info = drive_client.info_akun() if drive_ok else None
+    """Enam pemeriksaan sebelum sesi dimulai (design.md §4.1), plus ringkasan
+    yang dipakai kaki sidebar di semua halaman.
 
-    tether_dir = Path(os.environ.get("TETHER_DROPBOX", AKAR / "tether_dropbox"))
-    archive_dir = Path(os.environ.get("LOCAL_ARCHIVE", AKAR / "local_archive"))
+    Yang menghalangi Mulai Sesi hanya keadaan yang tidak akan pulih sendiri:
+    belum login, kredensial tidak ada, token ditolak, pemantau mati, sesi lain
+    masih berjalan. Wifi putus hanya peringatan — foto diarsipkan dan diupload
+    begitu tersambung; itulah alasan arsip lokal ada."""
+    st = drive_client.status()
+    terhubung = st["keadaan"] == "terhubung"
+    info = drive_client.info_akun() if terhubung else None
+    struktur = _struktur_drive(terhubung)
 
-    # Ruang disk.
+    tether_dir, archive_dir = watcher.TETHER_DIR, watcher.ARCHIVE_DIR
     try:
-        disk = shutil.disk_usage(str(archive_dir.parent))
+        disk = shutil.disk_usage(str(archive_dir if archive_dir.exists() else archive_dir.parent))
         disk_bebas_gb = round(disk.free / (1024 ** 3), 1)
     except Exception:
         disk_bebas_gb = None
 
+    stat = watcher.statistik()
+    sesi = db.sesi_aktif()
+
+    boleh, alasan, peringatan = True, None, None
+    if sesi:
+        boleh, alasan = False, f"Masih ada sesi berjalan atas nama {sesi['guest_name']} — lanjutkan atau akhiri lewat pita di atas."
+    elif not watcher.sedang_berjalan():
+        boleh, alasan = False, "Pemantau folder tethering tidak berjalan. Mulai ulang server."
+    elif st["keadaan"] in ("belum_login", "tanpa_credentials", "token_kedaluwarsa") and not IZINKAN_TANPA_DRIVE:
+        boleh, alasan = False, "Google Drive belum terhubung — foto tidak akan sampai ke tamu. Login di Pengaturan."
+    elif not terhubung:
+        peringatan = "Drive tidak terjangkau saat ini. Foto diarsipkan di laptop dan diupload otomatis begitu tersambung."
+
     return {
-        "drive_terhubung": drive_ok,
-        "drive_email": drive_info["email"] if drive_info else None,
-        "drive_kuota_sisa_gb": round(drive_info["kuota_sisa"] / (1024 ** 3), 1) if drive_info else None,
+        "versi": VERSI,
+        "drive": {
+            **st,
+            "kuota_total_gb": _gb(info["kuota_total"]) if info else None,
+            "kuota_terpakai_gb": _gb(info["kuota_terpakai"]) if info else None,
+            "kuota_sisa_gb": _gb(info["kuota_sisa"]) if info else None,
+        },
+        "drive_terhubung": terhubung,
+        "drive_struktur": struktur,
+        "internet": drive_client.internet_ok(),
         "watcher_aktif": watcher.sedang_berjalan(),
         "tether_folder": str(tether_dir),
         "tether_ada": tether_dir.exists(),
+        "archive_folder": str(archive_dir),
         "disk_bebas_gb": disk_bebas_gb,
         "layar_tamu": peristiwa.ada_tamu(),
-        "kamera": os.environ.get("CAMERA_MODEL", "Sony ZV-E10"),
-        "tethering_app": os.environ.get("TETHERING_APP", "Imaging Edge Desktop"),
+        "layar_tamu_jumlah": peristiwa.jumlah_tamu(),
+        "tampilan_tamu": tampilan_tamu(),
+        "kamera": KAMERA,
+        "tethering_app": TETHERING_APP,
+        "sesi_aktif": sesi,
+        "boleh_mulai": boleh,
+        "alasan_tidak_boleh": alasan,
+        "peringatan_mulai": peringatan,
+        "izinkan_tanpa_drive": IZINKAN_TANPA_DRIVE,
+        **stat,
     }
 
 
-# --------------------------------------------------------------- Tampilan Tamu
+@app.get("/api/pengaturan")
+def pengaturan():
+    """Nilai konfigurasi yang berlaku — dibaca dari .env, tidak bisa diubah
+    dari browser (sengaja: aplikasi tidak punya login)."""
+    return {
+        "versi": VERSI,
+        "kamera": KAMERA,
+        "tethering_app": TETHERING_APP,
+        "tether_folder": str(watcher.TETHER_DIR),
+        "archive_folder": str(watcher.ARCHIVE_DIR),
+        "thumbs_folder": str(THUMBS_DIR),
+        "qr_folder": str(QR_DIR),
+        "db": str(db.BERKAS_DB),
+        "retry_delays": watcher.RETRY_DELAYS,
+        "penjaga_detik": watcher.PENJAGA_DETIK,
+        "upload_paralel": watcher.UPLOAD_PARALEL,
+        "tenggang_setelah_selesai": watcher.TENGGANG_SETELAH_SELESAI,
+        "stabilitas_detik": watcher.STABILITAS_DETIK,
+        "stabil_timeout": watcher.STABIL_TIMEOUT,
+        "izinkan_tanpa_drive": IZINKAN_TANPA_DRIVE,
+        "drive": drive_client.ringkasan(),
+        "ringkasan": db.ringkasan_riwayat(),
+    }
+
+
+# --------------------------------------------------------------- Drive
+
+
+@app.get("/api/drive/status")
+def drive_status(paksa: bool = False):
+    st = drive_client.status(paksa=paksa)
+    return {**st, "login": drive_client.login_keadaan()}
+
+
+@app.post("/api/drive/login")
+def drive_login():
+    return {**drive_client.login_mulai(), "login": drive_client.login_keadaan()}
+
+
+@app.get("/api/drive/login")
+def drive_login_keadaan():
+    return drive_client.login_keadaan()
+
+
+@app.post("/api/drive/logout")
+def drive_logout():
+    global _cache_struktur
+    _cache_struktur = (0.0, None)
+    hasil = drive_client.logout()
+    peristiwa.kirim({"jenis": "drive_status", "status": drive_client.status(paksa=True)}, ke_tamu=False)
+    return hasil
+
+
+# --------------------------------------------------------------- Tampilan tamu
+
+
+def _thumbs_tampilan(sesi: dict, jumlah: int = 6) -> list[dict]:
+    fotos = db.daftar_foto(sesi["id"])
+    hasil = []
+    for f in fotos[-jumlah:]:
+        thumb = watcher.nama_thumb(f["local_path"])
+        if (THUMBS_DIR / sesi["session_code"] / thumb).exists():
+            hasil.append({"nama": Path(f["local_path"]).name, "thumb": thumb})
+    return hasil
+
+
+def _keadaan_qr(sesi: dict) -> dict:
+    sesi = watcher.pastikan_qr(sesi)
+    hitung = sesi["foto"]
+    return {
+        "keadaan": "qr",
+        "session_id": sesi["id"],
+        "nama_tamu": sesi["guest_name"],
+        "session_code": sesi["session_code"],
+        "drive_folder_link": sesi["drive_folder_link"],
+        "qr_ada": bool(sesi.get("qr_path")) and Path(sesi["qr_path"]).exists(),
+        # Tamu tidak boleh melihat status upload (design.md §5.2): angkanya
+        # jumlah foto, sama seperti saat memotret — bukan yang sudah di Drive.
+        "foto_count": hitung["total"],
+        "foto_uploaded": hitung["uploaded"],
+        "fotos": _thumbs_tampilan(sesi),
+    }
 
 
 @app.get("/api/tampilan-tamu")
 def tampilan_tamu():
-    """Keadaan yang harus ditampilkan di layar tamu."""
+    """Keadaan yang harus ditampilkan di layar tamu: sambutan, memotret, qr."""
     sesi = db.sesi_aktif()
-    if sesi is None:
-        # Cek sesi terakhir yang selesai (untuk tampilkan QR).
-        with db.koneksi() as conn:
-            terakhir = conn.execute(
-                "SELECT * FROM sessions WHERE status = 'done' ORDER BY id DESC LIMIT 1"
-            ).fetchone()
-        if terakhir and terakhir["qr_path"]:
-            fotos = db.daftar_foto(terakhir["id"])
-            return {
-                "keadaan": "qr",
-                "nama_tamu": terakhir["guest_name"],
-                "session_code": terakhir["session_code"],
-                "drive_folder_link": terakhir["drive_folder_link"],
-                "foto_count": len(fotos),
-                "fotos": [{"nama": Path(f["local_path"]).name} for f in fotos[:6]],
-            }
-        return {"keadaan": "sambutan"}
-
-    if sesi["status"] == "active":
-        fotos = db.daftar_foto(sesi["id"])
+    if sesi:
         return {
             "keadaan": "memotret",
+            "session_id": sesi["id"],
             "nama_tamu": sesi["guest_name"],
             "session_code": sesi["session_code"],
-            "foto_count": len(fotos),
-            "fotos": [{"nama": Path(f["local_path"]).name} for f in fotos[-6:]],
+            "foto_count": sesi["foto"]["total"],
+            "fotos": _thumbs_tampilan(sesi),
         }
 
+    paksa = db.ambil_pengaturan("tampilkan_qr_sesi_id")
+    if paksa:
+        try:
+            s = db.ambil_sesi(int(paksa))
+            if s.get("drive_folder_link"):
+                return {**_keadaan_qr(s), "dari_riwayat": True}
+        except (db.GalatDB, ValueError):
+            db.simpan_pengaturan("tampilkan_qr_sesi_id", None)
+
+    if db.ambil_pengaturan("paksa_sambutan"):
+        return {"keadaan": "sambutan", "dipaksa": True}
+
+    terakhir = db.sesi_terakhir_selesai()
+    if terakhir and terakhir.get("drive_folder_link"):
+        return _keadaan_qr(terakhir)
     return {"keadaan": "sambutan"}
 
 
 # --------------------------------------------------------------- SSE
 
 
+def _json(data) -> str:
+    return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def _aliran(q: asyncio.Queue, lepas, halo: dict):
+    """Generator SSE. Pelanggan dilepas hanya di finally milik generator —
+    yaitu saat koneksi benar-benar putus — bukan saat handler return."""
+
+    async def gen():
+        try:
+            yield {"event": "halo", "data": _json(halo)}
+            while True:
+                try:
+                    data = await asyncio.wait_for(q.get(), timeout=25)
+                    yield {"data": data}
+                except asyncio.TimeoutError:
+                    yield {"data": '{"jenis":"ping"}'}
+        finally:
+            lepas(q)
+
+    return EventSourceResponse(gen(), ping=60)
+
+
 @app.get("/api/peristiwa")
 async def sse_operator():
     """Server-Sent Events untuk jendela operator."""
     q = peristiwa.daftar()
-    try:
-        async def gen():
-            try:
-                while True:
-                    data = await asyncio.wait_for(q.get(), timeout=30)
-                    yield {"data": data}
-            except asyncio.TimeoutError:
-                yield {"data": '{"jenis":"ping"}'}
-            except asyncio.CancelledError:
-                pass
-
-        return EventSourceResponse(gen())
-    finally:
-        peristiwa.hapus(q)
+    halo = {"jenis": "halo", "sesi_aktif": db.sesi_aktif(), "tampilan": tampilan_tamu(),
+            "layar_tamu": peristiwa.ada_tamu()}
+    return _aliran(q, peristiwa.hapus, halo)
 
 
 @app.get("/api/peristiwa-tamu")
 async def sse_tamu():
-    """Server-Sent Events untuk jendela tamu."""
+    """Server-Sent Events untuk jendela tamu. Koneksi yang hidup di sini
+    yang membuat chip "Layar tamu terhubung" menyala."""
     q = peristiwa.daftar_tamu()
-    try:
-        async def gen():
-            try:
-                while True:
-                    data = await asyncio.wait_for(q.get(), timeout=30)
-                    yield {"data": data}
-            except asyncio.TimeoutError:
-                yield {"data": '{"jenis":"ping"}'}
-            except asyncio.CancelledError:
-                pass
+    halo = {"jenis": "halo", "tampilan": tampilan_tamu()}
+    peristiwa.kirim({"jenis": "layar_tamu", "terhubung": True,
+                     "jumlah": peristiwa.jumlah_tamu()}, ke_tamu=False)
 
-        return EventSourceResponse(gen())
-    finally:
-        peristiwa.hapus_tamu(q)
+    def lepas(qq):
+        peristiwa.hapus_tamu(qq)
+        peristiwa.kirim({"jenis": "layar_tamu", "terhubung": peristiwa.ada_tamu(),
+                         "jumlah": peristiwa.jumlah_tamu()}, ke_tamu=False)
+
+    return _aliran(q, lepas, halo)
 
 
-# --------------------------------------------------------------- Static & Tamu
+# --------------------------------------------------------------- Halaman
 
-PROTO_DIR = AKAR / "prototipe"
-STATIC_DIR = AKAR / "app" / "static"
 
-# Mount static files kalau ada (fonts, dll).
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+@app.get("/tamu", include_in_schema=False)
+def halaman_tamu():
+    """Halaman layar tamu — dokumen terpisah tanpa navigasi (design.md §8)."""
+    return FileResponse(str(WEB_DIR / "tamu.html"), media_type="text/html")
 
-# Mount folder prototipe di root — HARUS terakhir karena catch-all.
-# Ini membuat ui.css, app.js, dan aset lain bisa diakses langsung dari
-# root (/ui.css, /app.js) sesuai referensi relatif di HTML prototipe.
-# html=True menjadikan index.html sebagai halaman default untuk "/".
-if PROTO_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(PROTO_DIR), html=True), name="prototipe")
+
+if WEB_DIR.exists():
+    # Harus terakhir karena catch-all. html=True menjadikan index.html
+    # halaman untuk "/".
+    app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
 
 if __name__ == "__main__":

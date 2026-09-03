@@ -1,4 +1,4 @@
-"""Klien Google Drive (arsitektur-sistem-photobooth.md §3, langkah 2).
+"""Klien Google Drive (arsitektur-sistem-photobooth.md §3).
 
 OAuth dengan scope `drive.file` saja — aplikasi hanya bisa melihat folder
 dan berkas yang ia buat sendiri, bukan seluruh isi Drive (arsitektur §7).
@@ -7,244 +7,685 @@ Alur:
   1. Buat folder per sesi saat operator menekan Mulai Sesi.
   2. Set izin *anyone with link = viewer*.
   3. Upload foto ke folder sesi.
-  4. Retry otomatis kalau gagal.
+  4. Retry dilakukan watcher; modul ini hanya melapor sukses/gagal.
 
 Kredensial:
-  credentials.json — OAuth client dari Google Cloud Console.
-  token.json      — dibuat otomatis saat login pertama.
+  credentials.json — OAuth client (Desktop app) dari Google Cloud Console.
+  token.json      — dibuat saat login pertama lewat tombol di Pengaturan.
+
+Aturan yang membentuk modul ini:
+
+* **Tidak ada browser yang terbuka di tengah request.** `status()`,
+  `terhubung()`, dan semua operasi Drive hanya memakai token yang sudah ada.
+  Login interaktif dijalankan terpisah lewat `login_mulai()` di thread latar.
+* **Tidak ada I/O jaringan di bawah kunci.** Kunci hanya menukar objek
+  kredensial; refresh token dan semua panggilan API punya batas waktu pendek
+  supaya wifi venue yang setengah mati tidak membekukan preflight dan upload.
+* **Folder induk harus milik aplikasi.** Dengan scope `drive.file`, folder
+  yang dibuat operator lewat browser tidak terlihat oleh aplikasi. Kalau
+  `DRIVE_PARENT_FOLDER_ID` diisi dan bisa diakses, ia dipakai; kalau kosong
+  atau ditolak, aplikasi memakai (atau membuat) folder induknya sendiri di
+  akar Drive dan mengingat ID-nya di tabel `pengaturan`.
+* **Mode palsu untuk uji.** `MCF_DRIVE_PALSU=1` mengganti seluruh Drive
+  dengan tiruan dalam memori — folder dan upload dicatat, tidak ada jaringan —
+  supaya alur upload, QR, dan balapan bisa diuji tanpa kredensial.
 """
 
 from __future__ import annotations
 
-import io
-import os
 import logging
+import os
+import socket
+import threading
+import time
 from pathlib import Path
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from . import db
+from .jalur import AKAR, env_bool, env_float, path_env
 
 log = logging.getLogger(__name__)
 
-AKAR = Path(__file__).resolve().parent.parent
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
-CRED_PATH = AKAR / "credentials.json"
-TOKEN_PATH = AKAR / "token.json"
+CRED_PATH = path_env("GOOGLE_CREDENTIALS", AKAR / "credentials.json")
+TOKEN_PATH = path_env("GOOGLE_TOKEN", AKAR / "token.json")
 
-# ID folder induk di Drive — diisi dari .env atau langsung di sini.
-PARENT_FOLDER_ID = os.environ.get("DRIVE_PARENT_FOLDER_ID", "")
+PARENT_FOLDER_ID = os.environ.get("DRIVE_PARENT_FOLDER_ID", "").strip()
+NAMA_ROOT = os.environ.get("DRIVE_ROOT_NAME", "MCF Photobooth").strip() or "MCF Photobooth"
+NAMA_FOLDER_QR = os.environ.get("DRIVE_FOLDER_QR", "1. QR").strip()
+NAMA_FOLDER_RESULT = os.environ.get("DRIVE_FOLDER_RESULT", "2. Result").strip()
+HTTP_TIMEOUT = env_float("DRIVE_HTTP_TIMEOUT", 20)
+LOGIN_TIMEOUT = env_float("DRIVE_LOGIN_TIMEOUT", 240)
+PALSU = env_bool("MCF_DRIVE_PALSU", False)
+# Mode palsu: kalau berkas ini ada, semua operasi Drive gagal seolah wifi putus.
+PALSU_SAKLAR_MATI = path_env("MCF_DRIVE_PALSU_SAKLAR", AKAR / "drive-palsu-mati")
+
+MIME_FOLDER = "application/vnd.google-apps.folder"
+
+_lokal = threading.local()
+_kunci = threading.Lock()
+_creds = None
+_creds_alasan = "belum_dicek"
+
+_cache_status: tuple[float, dict] | None = None
+_cache_internet: tuple[float, bool] | None = None
+
+_login_hasil: dict = {"berjalan": False, "hasil": None, "pesan": ""}
 
 
-def _dapatkan_kredensial() -> Credentials | None:
-    """Dapatkan kredensial OAuth. Buka browser kalau belum pernah login."""
-    creds = None
+# ------------------------------------------------------------------ jaringan
 
-    if TOKEN_PATH.exists():
+
+def internet_ok(paksa: bool = False) -> bool:
+    """Sambungan TCP ringan ke Google, di-cache 10 detik (design.md §4.1)."""
+    global _cache_internet
+    if PALSU:
+        return not _palsu.mati()
+    if not paksa and _cache_internet and time.time() - _cache_internet[0] < 10:
+        return _cache_internet[1]
+    try:
+        with socket.create_connection(("www.googleapis.com", 443), timeout=2.5):
+            ok = True
+    except OSError:
+        ok = False
+    _cache_internet = (time.time(), ok)
+    return ok
+
+
+# ================================================================ mode palsu
+
+
+class _DrivePalsu:
+    """Tiruan Drive dalam memori. Jeda kecil di tiap operasi memperlebar
+    jendela balapan supaya uji paralel benar-benar menguji kuncinya."""
+
+    def __init__(self) -> None:
+        self.kunci = threading.Lock()
+        self.jeda = env_float("MCF_DRIVE_PALSU_JEDA", 0.2)
+        self.gagal_sisa = int(env_float("MCF_DRIVE_PALSU_GAGAL", 0))
+        self.folder: dict[str, dict] = {}          # id → {"nama", "parent"}
+        self.berkas: dict[str, list[str]] = {}     # folder_id → nama berkas
+        self.n_folder_sesi = 0
+        self.n_upload = 0
+        self.n_upload_gagal = 0
+
+    def mati(self) -> bool:
+        return PALSU_SAKLAR_MATI.exists()
+
+    def buat_folder(self, nama: str, parent: str | None) -> dict:
+        time.sleep(self.jeda)
+        with self.kunci:
+            fid = f"palsu-{len(self.folder) + 1}"
+            self.folder[fid] = {"nama": nama, "parent": parent}
+            self.berkas.setdefault(fid, [])
+            return {"id": fid, "webViewLink": f"https://drive.google.com/drive/folders/{fid}"}
+
+    def upload(self, folder_id: str, nama: str) -> dict | None:
+        time.sleep(self.jeda / 2)
+        with self.kunci:
+            # Kegagalan yang disengaja hanya untuk foto — salinan QR ke "1. QR"
+            # memang usaha terbaik tanpa retry.
+            if self.gagal_sisa > 0 and folder_id != "palsu-qr":
+                self.gagal_sisa -= 1
+                self.n_upload_gagal += 1
+                return None
+            self.n_upload += 1
+            self.berkas.setdefault(folder_id, []).append(nama)
+            return {"id": f"berkas-{self.n_upload}", "webViewLink": f"https://drive.google.com/file/d/berkas-{self.n_upload}"}
+
+    def statistik(self) -> dict:
+        with self.kunci:
+            sesi = {fid: list(n) for fid, n in self.berkas.items()
+                    if self.folder.get(fid, {}).get("parent") == "palsu-result"}
+            return {
+                "folder_sesi_dibuat": self.n_folder_sesi,
+                "upload_sukses": self.n_upload,
+                "upload_gagal": self.n_upload_gagal,
+                "berkas_per_folder_sesi": sesi,
+            }
+
+
+_palsu = _DrivePalsu() if PALSU else None
+
+
+# ---------------------------------------------------------------- kredensial
+
+
+def _tulis_token(creds) -> None:
+    TOKEN_PATH.write_text(creds.to_json())
+    try:
+        TOKEN_PATH.chmod(0o600)
+    except OSError:
+        pass
+
+
+class _RequestBerbatas:
+    """Transport refresh token dengan batas waktu — google-auth memanggil
+    transport tanpa timeout, dan wifi venue yang menerima SYN tapi tidak
+    menjawab bisa menggantung sampai dua menit."""
+
+    def __init__(self) -> None:
+        from google.auth.transport.requests import Request
+        self._req = Request()
+
+    def __call__(self, url, method="GET", body=None, headers=None, timeout=None, **kw):
+        return self._req(url, method=method, body=body, headers=headers,
+                         timeout=timeout or HTTP_TIMEOUT, **kw)
+
+
+def _muat_kredensial():
+    """Kredensial dari token.json, di-refresh kalau kedaluwarsa. Tidak pernah
+    membuka browser, dan refresh dijalankan di luar kunci."""
+    global _creds, _creds_alasan
+    from google.oauth2.credentials import Credentials
+
+    with _kunci:
+        creds = _creds
+    if creds is not None and creds.valid:
+        return creds
+
+    if not CRED_PATH.exists():
+        with _kunci:
+            _creds_alasan, _creds = "tanpa_credentials", None
+        return None
+    if not TOKEN_PATH.exists():
+        with _kunci:
+            _creds_alasan, _creds = "belum_login", None
+        return None
+
+    if creds is None:
         try:
             creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
         except Exception as e:
-            log.warning("Token rusak, akan login ulang: %s", e)
-            creds = None
-
-    if creds and creds.expired and creds.refresh_token:
-        try:
-            creds.refresh(Request())
-        except Exception as e:
-            log.warning("Refresh token gagal: %s", e)
-            creds = None
-
-    if not creds or not creds.valid:
-        if not CRED_PATH.exists():
-            log.error(
-                "credentials.json tidak ditemukan di %s. "
-                "Unduh dari Google Cloud Console → APIs & Services → Credentials.",
-                CRED_PATH,
-            )
+            log.warning("token.json rusak: %s", e)
+            with _kunci:
+                _creds_alasan, _creds = "belum_login", None
             return None
-        flow = InstalledAppFlow.from_client_secrets_file(str(CRED_PATH), SCOPES)
-        creds = flow.run_local_server(port=0)
-        TOKEN_PATH.write_text(creds.to_json())
-        log.info("Token baru disimpan di %s", TOKEN_PATH)
 
+    if creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(_RequestBerbatas())
+            _tulis_token(creds)
+        except Exception as e:
+            teks = str(e)
+            if "invalid_grant" in teks or "invalid_client" in teks or "unauthorized" in teks.lower():
+                alasan = "token_kedaluwarsa"
+            elif not internet_ok():
+                alasan = "offline"
+            else:
+                alasan = "galat"
+            log.warning("Refresh token gagal (%s): %s", alasan, teks[:160])
+            with _kunci:
+                _creds_alasan = alasan
+                # Kredensial tetap disimpan kalau cuma soal jaringan: percobaan
+                # berikutnya cukup refresh lagi, tidak perlu login ulang.
+                _creds = creds if alasan in ("offline", "galat") else None
+            return None
+
+    if not creds.valid:
+        with _kunci:
+            _creds_alasan, _creds = "token_kedaluwarsa", None
+        return None
+
+    with _kunci:
+        _creds_alasan, _creds = "ok", creds
     return creds
 
 
-def _bangun_layanan():
-    """Bangun service Google Drive API v3."""
-    creds = _dapatkan_kredensial()
-    if not creds:
-        return None
-    return build("drive", "v3", credentials=creds)
-
-
-# Cache service supaya tidak rebuild tiap panggilan.
-_service = None
-
-
 def _svc():
-    global _service
-    if _service is None:
-        _service = _bangun_layanan()
-    return _service
+    """Service Drive v3 per thread dengan batas waktu HTTP. httplib2 di balik
+    googleapiclient tidak thread-safe, sementara beberapa upload berjalan
+    bersamaan."""
+    creds = _muat_kredensial()
+    if creds is None:
+        return None
+    svc = getattr(_lokal, "svc", None)
+    if svc is None or getattr(_lokal, "creds", None) is not creds:
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+        from googleapiclient.discovery import build
+
+        http = AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT))
+        svc = build("drive", "v3", http=http, cache_discovery=False)
+        _lokal.svc = svc
+        _lokal.creds = creds
+    return svc
 
 
-def reset_service():
-    """Reset service — dipanggil kalau token kedaluwarsa di tengah jalan."""
-    global _service
-    _service = None
+def reset_service() -> None:
+    """Lupakan kredensial yang di-cache — dipanggil setelah login/logout."""
+    global _creds, _cache_status
+    with _kunci:
+        _creds = None
+        _cache_status = None
+    if hasattr(_lokal, "svc"):
+        del _lokal.svc
+
+
+# -------------------------------------------------------------------- status
+
+
+def status(paksa: bool = False) -> dict:
+    """Keadaan sambungan Drive untuk pemeriksaan awal dan Pengaturan.
+
+    keadaan: terhubung | belum_login | token_kedaluwarsa | tanpa_credentials |
+             offline | galat
+    """
+    global _cache_status
+    if PALSU:
+        mati = _palsu.mati()
+        return {"keadaan": "offline" if mati else "terhubung",
+                "email": None if mati else "drive-palsu@example.com", "nama": "Drive palsu",
+                "pesan": "Mode uji: saklar mati aktif." if mati else "Mode uji: Drive tiruan dalam memori.",
+                "login_berjalan": False, "credentials_ada": True, "token_ada": True, "palsu": True}
+    if not paksa and _cache_status and time.time() - _cache_status[0] < 15:
+        return _cache_status[1]
+
+    hasil: dict = {
+        "keadaan": "galat", "email": None, "nama": None, "pesan": "",
+        "login_berjalan": _login_hasil["berjalan"],
+        "credentials_ada": CRED_PATH.exists(), "token_ada": TOKEN_PATH.exists(),
+    }
+    if not (CRED_PATH.exists() and TOKEN_PATH.exists()) or not internet_ok():
+        # Jalur cepat: tanpa berkas, atau tanpa internet, tidak perlu menyentuh Google.
+        if not CRED_PATH.exists():
+            hasil.update(keadaan="tanpa_credentials", pesan=f"credentials.json tidak ditemukan di {CRED_PATH}.")
+        elif not TOKEN_PATH.exists():
+            hasil.update(keadaan="belum_login", pesan="Belum pernah login. Tekan Login Google di Pengaturan.")
+        else:
+            hasil.update(keadaan="offline", pesan="Tidak ada koneksi internet. Foto diarsipkan dan diupload begitu tersambung.")
+        _cache_status = (time.time(), hasil)
+        return hasil
+
+    svc = _svc()
+    if svc is None:
+        hasil["keadaan"] = _creds_alasan if _creds_alasan != "ok" else "galat"
+        hasil["pesan"] = {
+            "tanpa_credentials": f"credentials.json tidak ditemukan di {CRED_PATH}.",
+            "belum_login": "Belum pernah login. Tekan Login Google di Pengaturan.",
+            "token_kedaluwarsa": "Token ditolak Google. Tekan Login Google untuk login ulang.",
+            "offline": "Tidak ada koneksi internet. Foto diarsipkan dan diupload begitu tersambung.",
+            "galat": "Google tidak menjawab. Coba lagi sebentar.",
+        }.get(hasil["keadaan"], "")
+    else:
+        try:
+            about = svc.about().get(fields="user").execute()
+            user = about.get("user", {})
+            hasil.update(keadaan="terhubung", email=user.get("emailAddress"), nama=user.get("displayName"))
+        except Exception as e:
+            teks = str(e)
+            if "invalid_grant" in teks or "401" in teks:
+                hasil.update(keadaan="token_kedaluwarsa", pesan="Token ditolak Google. Tekan Login Google untuk login ulang.")
+                reset_service()
+            elif not internet_ok(paksa=True):
+                hasil.update(keadaan="offline", pesan="Tidak ada koneksi internet.")
+            else:
+                hasil.update(keadaan="galat", pesan=teks[:200])
+            log.warning("Drive tidak terhubung: %s", teks[:200])
+
+    _cache_status = (time.time(), hasil)
+    return hasil
 
 
 def terhubung() -> bool:
-    """Cek apakah Google Drive terhubung dan token valid."""
-    try:
-        svc = _svc()
-        if svc is None:
-            return False
-        svc.about().get(fields="user").execute()
-        return True
-    except Exception as e:
-        log.warning("Drive tidak terhubung: %s", e)
-        return False
+    return status()["keadaan"] == "terhubung"
 
 
 def info_akun() -> dict | None:
-    """Dapatkan info akun Drive (email, kuota)."""
+    """Email dan kuota Drive."""
+    if PALSU:
+        gb = 1024 ** 3
+        return {"email": "drive-palsu@example.com", "nama": "Drive palsu",
+                "kuota_total": 15 * gb, "kuota_terpakai": 3 * gb, "kuota_sisa": 12 * gb}
     try:
         svc = _svc()
         if svc is None:
             return None
-        about = svc.about().get(
-            fields="user,storageQuota"
-        ).execute()
+        about = svc.about().get(fields="user,storageQuota").execute()
         user = about.get("user", {})
         quota = about.get("storageQuota", {})
+        limit = int(quota.get("limit", 0) or 0)
+        usage = int(quota.get("usage", 0) or 0)
         return {
-            "email": user.get("emailAddress", ""),
-            "nama": user.get("displayName", ""),
-            "kuota_total": int(quota.get("limit", 0)),
-            "kuota_terpakai": int(quota.get("usage", 0)),
-            "kuota_sisa": int(quota.get("limit", 0)) - int(quota.get("usage", 0)),
+            "email": user.get("emailAddress", ""), "nama": user.get("displayName", ""),
+            "kuota_total": limit, "kuota_terpakai": usage,
+            "kuota_sisa": max(0, limit - usage) if limit else None,
         }
     except Exception as e:
         log.warning("Gagal ambil info akun: %s", e)
         return None
 
 
-def cari_subfolder(parent_id: str, nama: str) -> str | None:
-    """Cari subfolder dengan nama tertentu di dalam parent."""
+def kuota() -> dict | None:
+    info = info_akun()
+    if not info:
+        return None
+    return {"total": info["kuota_total"], "terpakai": info["kuota_terpakai"], "sisa": info["kuota_sisa"]}
+
+
+# --------------------------------------------------------------------- login
+
+
+def login_mulai() -> dict:
+    """Jalankan alur OAuth di thread latar. Browser bawaan laptop terbuka;
+    setelah operator mengizinkan, token.json ditulis dan sambungan diuji.
+    Ada batas waktu supaya tab yang ditutup tidak mengunci tombol selamanya."""
+    if PALSU:
+        return {"ok": True, "pesan": "Mode uji: Drive palsu selalu terhubung."}
+    if not CRED_PATH.exists():
+        return {"ok": False, "pesan": f"credentials.json tidak ditemukan di {CRED_PATH}."}
+    with _kunci:
+        if _login_hasil["berjalan"]:
+            return {"ok": True, "pesan": "Login sudah berjalan — periksa jendela browser."}
+        _login_hasil.update(berjalan=True, hasil=None, pesan="Menunggu izin di browser…")
+
+    def jalan() -> None:
+        try:
+            from google_auth_oauthlib.flow import InstalledAppFlow
+            flow = InstalledAppFlow.from_client_secrets_file(str(CRED_PATH), SCOPES)
+            creds = flow.run_local_server(
+                port=0, open_browser=True, timeout_seconds=int(LOGIN_TIMEOUT),
+                authorization_prompt_message="",
+                success_message="Login berhasil. Tab ini boleh ditutup, kembali ke MCF Photobooth.",
+            )
+            _tulis_token(creds)
+            reset_service()
+            st = status(paksa=True)
+            if st["keadaan"] == "terhubung":
+                _login_hasil.update(hasil="ok", pesan=f"Terhubung sebagai {st['email']}.")
+            else:
+                _login_hasil.update(hasil="gagal", pesan=st.get("pesan") or "Token tersimpan tapi Drive belum menjawab.")
+        except Exception as e:
+            teks = str(e)
+            if "timed out" in teks.lower() or "timeout" in teks.lower() or isinstance(e, TimeoutError):
+                teks = f"Waktu login habis ({int(LOGIN_TIMEOUT)} detik). Tekan Login Google lagi."
+            log.error("Login Google gagal: %s", teks[:200])
+            _login_hasil.update(hasil="gagal", pesan=teks[:200])
+        finally:
+            _login_hasil["berjalan"] = False
+            try:
+                from . import peristiwa
+                peristiwa.kirim({"jenis": "drive_status", "status": status()}, ke_tamu=False)
+            except Exception:
+                pass
+
+    threading.Thread(target=jalan, name="drive-login", daemon=True).start()
+    return {"ok": True, "pesan": "Browser dibuka. Pilih akun Drive yang akan menampung foto."}
+
+
+def login_keadaan() -> dict:
+    return dict(_login_hasil)
+
+
+def logout() -> dict:
+    """Hapus token.json — dipakai tombol Ganti akun. ID folder yang diingat
+    ikut dilupakan; folder induk bernama sama dicari lagi saat login berikutnya
+    supaya akun yang sama tidak mendapat dua "MCF Photobooth"."""
+    if PALSU:
+        return {"ok": True, "pesan": "Mode uji: tidak ada token untuk dihapus."}
     try:
-        svc = _svc()
-        if not svc: return None
-        res = svc.files().list(
-            q=f"'{parent_id}' in parents and name='{nama}' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-            fields="files(id)"
-        ).execute()
-        files = res.get("files", [])
-        if files: return files[0]["id"]
-        return None
+        if TOKEN_PATH.exists():
+            TOKEN_PATH.unlink()
+    except OSError as e:
+        return {"ok": False, "pesan": str(e)}
+    reset_service()
+    for kunci in ("drive_root_id", "drive_qr_id", "drive_result_id", "drive_induk_sumber"):
+        db.simpan_pengaturan(kunci, None)
+    return {"ok": True, "pesan": "Token dihapus. Login lagi untuk memilih akun."}
+
+
+# ------------------------------------------------------------------- folder
+
+
+def _folder_bisa_diakses(svc, folder_id: str) -> bool:
+    try:
+        meta = svc.files().get(fileId=folder_id, fields="id,mimeType,trashed").execute()
+        return meta.get("mimeType") == MIME_FOLDER and not meta.get("trashed")
     except Exception as e:
-        log.warning("Gagal cari subfolder %s: %s", nama, e)
-        return None
+        log.warning("Folder %s tidak bisa diakses dengan scope drive.file: %s", folder_id, str(e)[:120])
+        return False
 
 
-def buat_folder_sesi(nama_folder: str) -> dict | None:
-    """Buat folder baru di Drive untuk satu sesi di dalam '2. Result'.
+def _buat_folder(svc, nama: str, parent_id: str | None) -> dict:
+    meta = {"name": nama, "mimeType": MIME_FOLDER}
+    if parent_id:
+        meta["parents"] = [parent_id]
+    return svc.files().create(body=meta, fields="id,webViewLink").execute()
 
-    Returns dict {"id": ..., "link": ...} atau None kalau gagal.
-    """
+
+def _aman_q(teks: str) -> str:
+    return teks.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _cari_subfolder(svc, parent_id: str, nama: str) -> str | None:
+    res = svc.files().list(
+        q=f"'{_aman_q(parent_id)}' in parents and name='{_aman_q(nama)}' and mimeType='{MIME_FOLDER}' and trashed=false",
+        fields="files(id)", pageSize=1,
+    ).execute()
+    files = res.get("files", [])
+    return files[0]["id"] if files else None
+
+
+def cari_berkas(folder_id: str, nama: str) -> str | None:
+    """ID berkas bernama `nama` di dalam folder — dipakai sebelum upload ulang
+    supaya respons yang hilang di jaringan tidak menghasilkan berkas ganda."""
+    if PALSU:
+        if _palsu.mati():
+            return None
+        with _palsu.kunci:
+            return "ada" if nama in _palsu.berkas.get(folder_id, []) else None
     try:
         svc = _svc()
         if svc is None:
             return None
-
-        meta = {
-            "name": nama_folder,
-            "mimeType": "application/vnd.google-apps.folder",
-        }
-        if PARENT_FOLDER_ID:
-            result_id = cari_subfolder(PARENT_FOLDER_ID, "2. Result")
-            if result_id:
-                meta["parents"] = [result_id]
-            else:
-                meta["parents"] = [PARENT_FOLDER_ID]
-
-        folder = svc.files().create(body=meta, fields="id,webViewLink").execute()
-        folder_id = folder["id"]
-        folder_link = folder["webViewLink"]
-
-        # Set izin: anyone with link = viewer.
-        svc.permissions().create(
-            fileId=folder_id,
-            body={"type": "anyone", "role": "reader"},
-            fields="id",
+        res = svc.files().list(
+            q=f"'{_aman_q(folder_id)}' in parents and name='{_aman_q(nama)}' and trashed=false",
+            fields="files(id)", pageSize=1,
         ).execute()
+        files = res.get("files", [])
+        return files[0]["id"] if files else None
+    except Exception as e:
+        log.warning("Gagal mencari berkas %s: %s", nama, str(e)[:120])
+        return None
 
+
+def folder_induk() -> dict | None:
+    """Folder induk yang benar-benar bisa dipakai, beserta asalnya.
+
+    Returns {"id": ..., "sumber": "env"|"aplikasi"} atau None kalau Drive
+    tidak terhubung."""
+    if PALSU:
+        if "palsu-root" not in _palsu.folder:
+            _palsu.folder["palsu-root"] = {"nama": NAMA_ROOT, "parent": None}
+        return {"id": "palsu-root", "sumber": "aplikasi"}
+
+    svc = _svc()
+    if svc is None:
+        return None
+
+    if PARENT_FOLDER_ID:
+        if _folder_bisa_diakses(svc, PARENT_FOLDER_ID):
+            db.simpan_pengaturan("drive_induk_sumber", "env")
+            return {"id": PARENT_FOLDER_ID, "sumber": "env"}
+        log.error(
+            "DRIVE_PARENT_FOLDER_ID=%s ditolak Drive. Dengan scope drive.file hanya folder "
+            "buatan aplikasi yang terlihat — aplikasi memakai folder induknya sendiri.",
+            PARENT_FOLDER_ID,
+        )
+
+    root_id = db.ambil_pengaturan("drive_root_id")
+    if root_id and _folder_bisa_diakses(svc, root_id):
+        db.simpan_pengaturan("drive_induk_sumber", "aplikasi")
+        return {"id": root_id, "sumber": "aplikasi"}
+
+    try:
+        root_id = _cari_subfolder(svc, "root", NAMA_ROOT)
+        if root_id:
+            log.info("Folder induk '%s' ditemukan lagi di Drive.", NAMA_ROOT)
+        else:
+            folder = _buat_folder(svc, NAMA_ROOT, None)
+            root_id = folder["id"]
+            log.info("Folder induk dibuat di Drive: %s → %s", NAMA_ROOT, folder.get("webViewLink"))
+    except Exception as e:
+        log.error("Gagal menyiapkan folder induk '%s': %s", NAMA_ROOT, e)
+        return None
+    db.simpan_pengaturan("drive_root_id", root_id)
+    db.simpan_pengaturan("drive_induk_sumber", "aplikasi")
+    for kunci in ("drive_qr_id", "drive_result_id"):
+        db.simpan_pengaturan(kunci, None)
+    return {"id": root_id, "sumber": "aplikasi"}
+
+
+def _subfolder(nama: str, kunci_cache: str) -> str | None:
+    """Subfolder bernama `nama` di bawah folder induk, dibuat kalau belum ada.
+    ID-nya diingat supaya tidak ada files.list di tiap Mulai Sesi."""
+    if PALSU:
+        fid = "palsu-qr" if kunci_cache == "drive_qr_id" else "palsu-result"
+        folder_induk()
+        _palsu.folder.setdefault(fid, {"nama": nama, "parent": "palsu-root"})
+        _palsu.berkas.setdefault(fid, [])
+        return fid
+
+    svc = _svc()
+    if svc is None:
+        return None
+    if not nama:
+        induk = folder_induk()
+        return induk["id"] if induk else None
+
+    cached = db.ambil_pengaturan(kunci_cache)
+    if cached and _folder_bisa_diakses(svc, cached):
+        return cached
+
+    induk = folder_induk()
+    if not induk:
+        return None
+    try:
+        fid = _cari_subfolder(svc, induk["id"], nama)
+        if not fid:
+            fid = _buat_folder(svc, nama, induk["id"])["id"]
+            log.info("Subfolder Drive dibuat: %s", nama)
+        db.simpan_pengaturan(kunci_cache, fid)
+        return fid
+    except Exception as e:
+        log.error("Gagal menyiapkan subfolder '%s': %s", nama, e)
+        return None
+
+
+def pastikan_struktur() -> dict | None:
+    """Folder induk + subfolder QR dan Result. Dipanggil preflight supaya
+    masalah struktur ketahuan sebelum tamu pertama, bukan saat Mulai Sesi."""
+    induk = folder_induk()
+    if not induk:
+        return None
+    return {
+        "induk": induk["id"], "sumber": induk["sumber"],
+        "qr": _subfolder(NAMA_FOLDER_QR, "drive_qr_id"),
+        "result": _subfolder(NAMA_FOLDER_RESULT, "drive_result_id"),
+    }
+
+
+def buat_folder_sesi(nama_folder: str) -> dict | None:
+    """Folder sesi di bawah '2. Result' (atau langsung di bawah induk kalau
+    nama subfolder dikosongkan), izin anyone-with-link viewer.
+
+    Returns {"id", "link"} atau None kalau gagal. Pemanggil (watcher) yang
+    menjamin fungsi ini dipanggil paling banyak sekali per sesi."""
+    if PALSU:
+        if _palsu.mati():
+            return None
+        parent = _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
+        f = _palsu.buat_folder(nama_folder, parent)
+        with _palsu.kunci:
+            _palsu.n_folder_sesi += 1
+        return {"id": f["id"], "link": f["webViewLink"]}
+
+    try:
+        svc = _svc()
+        if svc is None:
+            return None
+        parent = _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
+        if not parent:
+            induk = folder_induk()
+            parent = induk["id"] if induk else None
+
+        folder = _buat_folder(svc, nama_folder, parent)
+        folder_id, folder_link = folder["id"], folder["webViewLink"]
+        svc.permissions().create(
+            fileId=folder_id, body={"type": "anyone", "role": "reader"}, fields="id",
+        ).execute()
         log.info("Folder Drive dibuat: %s → %s", nama_folder, folder_link)
         return {"id": folder_id, "link": folder_link}
-
     except Exception as e:
-        log.error("Gagal buat folder Drive '%s': %s", nama_folder, e)
+        log.error("Gagal buat folder Drive '%s': %s", nama_folder, str(e)[:200])
         return None
 
 
 def upload_qr(qr_path: str, nama_file: str) -> dict | None:
-    """Upload QR Code ke folder '1. QR' di Drive."""
+    """Simpan salinan QR ke subfolder '1. QR' — cadangan kalau laptop rusak."""
     try:
-        if not PARENT_FOLDER_ID: return None
-        qr_folder_id = cari_subfolder(PARENT_FOLDER_ID, "1. QR")
-        if not qr_folder_id: return None
-        return upload_foto(qr_path, qr_folder_id, nama_file)
+        parent = _subfolder(NAMA_FOLDER_QR, "drive_qr_id")
+        if not parent:
+            return None
+        return upload_foto(qr_path, parent, nama_file)
     except Exception as e:
         log.error("Gagal upload QR ke Drive: %s", e)
         return None
 
 
-def upload_foto(path_lokal: str, folder_id: str, custom_name: str | None = None) -> dict | None:
-    """Upload satu foto ke folder Drive.
+def upload_foto(path_lokal: str, folder_id: str, custom_name: str | None = None,
+                cek_dulu: bool = False) -> dict | None:
+    """Upload satu berkas ke folder Drive. Returns {"id", "link"} atau None.
 
-    Returns dict {"id": ..., "link": ...} atau None kalau gagal.
-    """
+    `cek_dulu=True` (dipakai pada percobaan ulang) mencari berkas bernama sama
+    di folder itu lebih dulu: upload sebelumnya bisa saja sampai di Google
+    tapi responsnya hilang di jaringan."""
+    path = Path(path_lokal)
+    nama = custom_name or path.name
+    if cek_dulu:
+        ada = cari_berkas(folder_id, nama)
+        if ada:
+            log.info("Sudah ada di Drive, tidak diupload lagi: %s", nama)
+            return {"id": ada, "link": "", "sudah_ada": True}
+
+    if PALSU:
+        if not path.exists() or _palsu.mati():
+            return None
+        hasil = _palsu.upload(folder_id, nama)
+        return {"id": hasil["id"], "link": hasil["webViewLink"]} if hasil else None
+
     try:
         svc = _svc()
         if svc is None:
             return None
+        from googleapiclient.http import MediaFileUpload
 
-        path = Path(path_lokal)
-        mime = "image/jpeg"
-        if path.suffix.lower() == ".png":
-            mime = "image/png"
-        elif path.suffix.lower() in (".arw", ".raw"):
-            mime = "application/octet-stream"
-
-        media = MediaFileUpload(str(path), mimetype=mime, resumable=True)
-        meta = {
-            "name": custom_name or path.name,
-            "parents": [folder_id],
-        }
-        berkas = svc.files().create(
-            body=meta,
-            media_body=media,
-            fields="id,webViewLink",
-        ).execute()
-
-        log.info("Foto diupload: %s → %s", path.name, berkas.get("webViewLink"))
+        ext = path.suffix.lower()
+        mime = {
+            ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+            ".tif": "image/tiff", ".tiff": "image/tiff", ".heic": "image/heic",
+        }.get(ext, "application/octet-stream")
+        media = MediaFileUpload(str(path), mimetype=mime, resumable=True, chunksize=4 * 1024 * 1024)
+        meta = {"name": nama, "parents": [folder_id]}
+        berkas = svc.files().create(body=meta, media_body=media, fields="id,webViewLink").execute()
+        log.info("Diupload: %s → %s", nama, berkas.get("webViewLink"))
         return {"id": berkas["id"], "link": berkas.get("webViewLink", "")}
-
     except Exception as e:
-        log.error("Gagal upload '%s' ke folder %s: %s", path_lokal, folder_id, e)
+        log.error("Gagal upload '%s' ke folder %s: %s", path_lokal, folder_id, str(e)[:200])
         return None
 
 
-def kuota() -> dict | None:
-    """Dapatkan kuota Drive."""
-    info = info_akun()
-    if not info:
-        return None
-    return {
-        "total": info["kuota_total"],
-        "terpakai": info["kuota_terpakai"],
-        "sisa": info["kuota_sisa"],
+def ringkasan() -> dict:
+    """Nilai konfigurasi untuk halaman Pengaturan — tanpa memanggil Drive."""
+    hasil = {
+        "scope": SCOPES[0].rsplit("/", 1)[-1],
+        "credentials_path": str(CRED_PATH), "credentials_ada": CRED_PATH.exists() or PALSU,
+        "token_path": str(TOKEN_PATH), "token_ada": TOKEN_PATH.exists() or PALSU,
+        "parent_folder_env": PARENT_FOLDER_ID or None,
+        "induk_id": (PARENT_FOLDER_ID if db.ambil_pengaturan("drive_induk_sumber") == "env" else db.ambil_pengaturan("drive_root_id")),
+        "induk_sumber": db.ambil_pengaturan("drive_induk_sumber"),
+        "nama_root": NAMA_ROOT, "folder_qr": NAMA_FOLDER_QR, "folder_result": NAMA_FOLDER_RESULT,
+        "http_timeout": HTTP_TIMEOUT, "palsu": PALSU,
     }
+    if PALSU:
+        hasil["statistik_palsu"] = _palsu.statistik()
+    return hasil

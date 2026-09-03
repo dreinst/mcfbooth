@@ -14,8 +14,9 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-AKAR = Path(__file__).resolve().parent.parent
-BERKAS_DB = Path(os.environ.get("MCF_DB", AKAR / "sessions.db"))
+from .jalur import AKAR, path_env
+
+BERKAS_DB = path_env("MCF_DB", AKAR / "sessions.db")
 
 STATUS_SESI = ("active", "done")
 STATUS_FOTO = ("pending", "uploaded", "failed")
@@ -45,12 +46,21 @@ CREATE TABLE IF NOT EXISTS photo_uploads (
     uploaded_at   TEXT
 );
 
+/* Nilai kecil yang harus bertahan antar-restart tapi bukan konfigurasi
+   operator: ID folder induk Drive yang dibuat aplikasi sendiri, ID subfolder
+   QR dan Result, dan sesi yang QR-nya sedang dipaksa tampil dari Riwayat. */
+CREATE TABLE IF NOT EXISTS pengaturan (
+    kunci TEXT PRIMARY KEY,
+    nilai TEXT
+);
+
 /* Riwayat dicari lewat nama tamu — itu satu-satunya jalan masuk kalau QR-nya
    hilang (PRD FR13). Indeks status dipakai mencari sesi yang masih active saat
    aplikasi dibuka. */
 CREATE INDEX IF NOT EXISTS idx_sessions_guest  ON sessions (guest_name);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions (status);
 CREATE INDEX IF NOT EXISTS idx_photos_session  ON photo_uploads (session_id);
+CREATE INDEX IF NOT EXISTS idx_photos_path     ON photo_uploads (local_path);
 """
 
 
@@ -73,8 +83,8 @@ def sekarang() -> str:
 
 @contextmanager
 def koneksi():
-    """Satu koneksi per operasi. Folder Watcher (langkah 3) menulis dari thread
-    lain sementara operator membaca; WAL membuat keduanya tidak saling mengunci,
+    """Satu koneksi per operasi. Folder Watcher menulis dari thread lain
+    sementara operator membaca; WAL membuat keduanya tidak saling mengunci,
     dan koneksi yang berumur pendek menghindari urusan check_same_thread."""
     conn = sqlite3.connect(BERKAS_DB, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -104,14 +114,37 @@ def siapkan() -> None:
         conn.executescript(SKEMA)
 
 
+# --------------------------------------------------------------- pengaturan
+
+
+def ambil_pengaturan(kunci: str, bawaan: str | None = None) -> str | None:
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT nilai FROM pengaturan WHERE kunci = ?", (kunci,)
+        ).fetchone()
+        return baris["nilai"] if baris else bawaan
+
+
+def simpan_pengaturan(kunci: str, nilai: str | None) -> None:
+    with koneksi() as conn:
+        if nilai is None:
+            conn.execute("DELETE FROM pengaturan WHERE kunci = ?", (kunci,))
+        else:
+            conn.execute(
+                "INSERT INTO pengaturan (kunci, nilai) VALUES (?, ?) "
+                "ON CONFLICT(kunci) DO UPDATE SET nilai = excluded.nilai",
+                (kunci, nilai),
+            )
+
+
 # --------------------------------------------------------------- kode sesi
 
 
 def _slug(nama: str) -> str:
-    """Cerminan `kodeSesi()` di prototipe/app.js. Semua huruf dan angka
-    dipertahankan — bukan hanya ASCII — supaya nama CJK atau ber-emoji tidak
-    menyusut jadi string kosong dan kehilangan satu-satunya penanda yang bisa
-    dicari operator."""
+    """Satu-satunya sumber kode sesi — tampilan tidak menghitungnya sendiri.
+    Semua huruf dan angka dipertahankan — bukan hanya ASCII — supaya nama CJK
+    atau ber-emoji tidak menyusut jadi string kosong dan kehilangan
+    satu-satunya penanda yang bisa dicari operator."""
     keluar: list[str] = []
     for ch in nama.strip():
         if ch.isalnum():
@@ -162,9 +195,19 @@ def _bentuk(conn: sqlite3.Connection, baris: sqlite3.Row) -> dict:
     `photo_count`. Kolomnya tetap ada dan tetap dijaga (arsitektur §3.3), tapi
     yang dikirim ke layar adalah hasil hitung — kolom turunan yang menyimpang
     dari tabel sumbernya adalah cara paling sunyi untuk berbohong ke operator,
-    dan tiga penghitung di layar Sesi bergantung pada angka ini."""
+    dan tiga penghitung di layar Sesi bergantung pada angka ini.
+
+    `foto_terakhir_at` diturunkan dari MAX(created_at) (design.md §8) — penanda
+    kepercayaan operator: kalau tethering berhenti mengirim, angka inilah yang
+    membuka rahasianya."""
     d = dict(baris)
     d["foto"] = _hitungan_foto(conn, baris["id"])
+    terakhir = conn.execute(
+        "SELECT created_at FROM photo_uploads WHERE session_id = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (baris["id"],),
+    ).fetchone()
+    d["foto_terakhir_at"] = terakhir["created_at"] if terakhir else None
     return d
 
 
@@ -203,6 +246,10 @@ def buat_sesi(nama_tamu: str) -> dict:
                VALUES (?, ?, 'active', ?)""",
             (kode, nama_tamu, sekarang()),
         )
+        # Sesi baru selalu mengambil alih monitor tamu: QR yang dipaksa tampil
+        # dari Riwayat, atau sambutan yang dipaksa, tidak boleh bertahan di
+        # atas sesi yang sedang berjalan.
+        conn.execute("DELETE FROM pengaturan WHERE kunci IN ('tampilkan_qr_sesi_id', 'paksa_sambutan')")
         baris = conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (cur.lastrowid,)
         ).fetchone()
@@ -231,6 +278,16 @@ def sesi_aktif() -> dict | None:
         return _bentuk(conn, baris) if baris else None
 
 
+def sesi_terakhir_selesai() -> dict | None:
+    """Sesi `done` paling baru. Dipakai layar tamu (QR bertahan sampai sesi
+    berikutnya) dan watcher (foto yang jatuh sesaat setelah Selesai)."""
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM sessions WHERE status = 'done' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return _bentuk(conn, baris) if baris else None
+
+
 def akhiri_sesi(sesi_id: int) -> dict:
     with koneksi() as conn:
         # Alasan yang sama dengan buat_sesi: dua klik Selesai beruntun tidak
@@ -254,19 +311,52 @@ def akhiri_sesi(sesi_id: int) -> dict:
             "UPDATE sessions SET status = 'done', finished_at = ? WHERE id = ?",
             (sekarang(), sesi_id),
         )
+        conn.execute("DELETE FROM pengaturan WHERE kunci = 'tampilkan_qr_sesi_id'")
         baris = conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (sesi_id,)
         ).fetchone()
         return _bentuk(conn, baris)
 
 
-def simpan_drive_info(sesi_id: int, folder_id: str, folder_link: str, qr_path: str | None = None) -> None:
-    """Simpan ID folder Drive dan link ke sesi."""
+def simpan_drive_info(sesi_id: int, folder_id: str, folder_link: str, qr_path: str | None = None) -> bool:
+    """Simpan ID folder Drive dan link ke sesi — hanya kalau sesi itu belum
+    punya folder. Returns False kalau sudah ada (thread lain menang); pemanggil
+    harus memakai nilai yang tersimpan, bukan folder yang baru dibuatnya."""
     with koneksi() as conn:
-        conn.execute(
-            "UPDATE sessions SET drive_folder_id = ?, drive_folder_link = ?, qr_path = ? WHERE id = ?",
+        cur = conn.execute(
+            "UPDATE sessions SET drive_folder_id = ?, drive_folder_link = ?, qr_path = ? "
+            "WHERE id = ? AND drive_folder_id IS NULL",
             (folder_id, folder_link, qr_path, sesi_id),
         )
+        return cur.rowcount == 1
+
+
+def simpan_qr_path(sesi_id: int, qr_path: str) -> None:
+    with koneksi() as conn:
+        conn.execute("UPDATE sessions SET qr_path = ? WHERE id = ?", (qr_path, sesi_id))
+
+
+def sesi_dari_kode(session_code: str) -> dict | None:
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM sessions WHERE session_code = ?", (session_code,)
+        ).fetchone()
+        return _bentuk(conn, baris) if baris else None
+
+
+def sesi_dengan_sisa(limit: int = 20) -> list[dict]:
+    """Sesi yang masih punya foto pending/failed, terbaru dulu — dipakai
+    penjaga latar untuk mengulang upload begitu Drive terjangkau lagi."""
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT DISTINCT s.* FROM sessions s JOIN photo_uploads p ON p.session_id = s.id "
+            "WHERE p.status IN ('pending', 'failed') ORDER BY s.id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [_bentuk(conn, b) for b in baris]
+
+
+# ------------------------------------------------------------------- foto
 
 
 def catat_foto(session_id: int, local_path: str) -> int:
@@ -283,6 +373,25 @@ def catat_foto(session_id: int, local_path: str) -> int:
             (session_id,),
         )
         return cur.lastrowid
+
+
+def foto_dari_path(local_path: str) -> dict | None:
+    """Watcher memakai ini untuk menolak berkas yang sudah tercatat — watchdog
+    bisa melapor satu berkas dua kali (created lalu moved/modified)."""
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM photo_uploads WHERE local_path = ? ORDER BY id DESC LIMIT 1",
+            (local_path,),
+        ).fetchone()
+        return dict(baris) if baris else None
+
+
+def ambil_foto(foto_id: int) -> dict | None:
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM photo_uploads WHERE id = ?", (foto_id,)
+        ).fetchone()
+        return dict(baris) if baris else None
 
 
 def tandai_foto_uploaded(foto_id: int, drive_file_id: str) -> None:
@@ -341,6 +450,26 @@ def foto_terakhir(session_id: int) -> dict | None:
         return dict(baris) if baris else None
 
 
+def foto_berstatus(status: str, session_id: int | None = None) -> list[dict]:
+    """Semua foto berstatus tertentu, opsional dibatasi satu sesi. Dipakai saat
+    server dinyalakan ulang: foto yang masih `pending` diupload lagi, karena
+    upload yang terpotong restart tidak pernah ditandai apa pun."""
+    with koneksi() as conn:
+        if session_id is None:
+            baris = conn.execute(
+                "SELECT * FROM photo_uploads WHERE status = ? ORDER BY id", (status,)
+            ).fetchall()
+        else:
+            baris = conn.execute(
+                "SELECT * FROM photo_uploads WHERE status = ? AND session_id = ? ORDER BY id",
+                (status, session_id),
+            ).fetchall()
+        return [dict(b) for b in baris]
+
+
+# ---------------------------------------------------------------- riwayat
+
+
 def cari_sesi(q: str = "", limit: int = 20, offset: int = 0) -> dict:
     """Pencarian nama tamu — jalan masuk kalau QR fisik hilang (PRD FR13).
     Tanpa `q`, ia jadi daftar Riwayat biasa: terbaru di atas."""
@@ -377,3 +506,37 @@ def cari_sesi(q: str = "", limit: int = 20, offset: int = 0) -> dict:
             "offset": offset,
             "sesi": [_bentuk(conn, b) for b in baris],
         }
+
+
+def ringkasan_riwayat() -> dict:
+    """Angka kecil untuk lencana sidebar dan kepala halaman Riwayat: total
+    sesi, sesi hari ini, dan sesi yang masih punya foto tertinggal."""
+    hari_ini = datetime.now().astimezone().strftime("%Y-%m-%d")
+    with koneksi() as conn:
+        total = conn.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"]
+        n_hari_ini = conn.execute(
+            "SELECT COUNT(*) AS n FROM sessions WHERE substr(started_at, 1, 10) = ?",
+            (hari_ini,),
+        ).fetchone()["n"]
+        bermasalah = conn.execute(
+            "SELECT COUNT(DISTINCT session_id) AS n FROM photo_uploads "
+            "WHERE status IN ('failed', 'pending')"
+        ).fetchone()["n"]
+        return {"total": total, "hari_ini": n_hari_ini, "bermasalah": bermasalah}
+
+
+def nama_serupa_hari_ini(nama: str) -> int:
+    """Berapa sesi hari ini yang memakai nama (slug) yang sama. Layar idle
+    memakainya untuk menyarankan pembeda saat operator mengetik (design.md
+    §4.1) — tabrakan nama tidak merusak data, tapi merusak pencarian nanti."""
+    slug = _slug(nama or "")
+    if not slug:
+        return 0
+    hari_ini = datetime.now().astimezone().strftime("%Y%m%d")
+    awalan = f"{slug}_{hari_ini}_"
+    pola = awalan.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+    with koneksi() as conn:
+        return conn.execute(
+            r"SELECT COUNT(*) AS n FROM sessions WHERE lower(session_code) LIKE ? ESCAPE '\'",
+            (f"{pola.lower()}%",),
+        ).fetchone()["n"]
