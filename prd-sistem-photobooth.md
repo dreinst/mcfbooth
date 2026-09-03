@@ -34,8 +34,9 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 ### Termasuk (v1)
 
 - Platform Windows
-- Tethering kamera DSLR/mirrorless lewat digiCamControl
+- Tethering kamera DSLR/mirrorless lewat aplikasi tethering yang menulis ke folder (Imaging Edge Desktop untuk Sony; digiCamControl sebagai cadangan)
 - Satu kamera & satu laptop operator per waktu
+- Layar terpisah untuk tamu (monitor kedua) yang mengikuti sesi sendiri — dipindahkan dari v2 ke v1, lihat `design.md` §1
 - Google Drive sebagai storage & distribusi ke tamu
 - Log sesi lokal (SQLite), bisa dicari berdasarkan nama tamu
 - Generate & tampilkan QR code setelah sesi diakhiri operator
@@ -46,7 +47,6 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 - Gallery page custom dengan branding & download ZIP (masih pakai link Drive langsung)
 - Dukungan Mac
 - Multi-kamera atau multi-station bersamaan
-- Layar terpisah untuk operator vs tamu
 - Deteksi otomatis "sesi selesai" (tetap manual, sesuai prinsip operator selalu konfirmasi)
 - Integrasi pencetakan foto atau pembayaran
 
@@ -64,7 +64,7 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 | FR8 | File foto lokal tidak dihapus sebelum upload terkonfirmasi sukses |
 | FR9 | Operator dapat melihat status upload real-time (jumlah terkirim / pending / gagal) |
 | FR10 | Operator dapat mengakhiri sesi secara manual dengan satu aksi |
-| FR11 | QR code digenerate dari link folder Drive saat sesi diakhiri |
+| FR11 | QR code dibuat dari link folder Drive saat sesi dimulai, dan ditampilkan saat sesi diakhiri |
 | FR12 | QR code ditampilkan jelas di layar untuk discan tamu |
 | FR13 | Setiap sesi tercatat permanen (nama tamu, kode sesi, link, status, waktu mulai/selesai), bertahan walau aplikasi ditutup |
 | FR14 | Operator dapat mencari sesi lama berdasarkan nama tamu dan generate ulang QR-nya |
@@ -102,7 +102,7 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 
 - Venue punya koneksi internet yang cukup (meski tidak stabil) untuk upload akhirnya berhasil — sistem menangani keterlambatan, bukan ketiadaan internet total permanen.
 - Operator punya akun Google dengan kuota Drive yang cukup untuk menampung foto event.
-- Kamera yang dipakai didukung oleh digiCamControl untuk tethering.
+- Kamera yang dipakai didukung aplikasi tethering yang bisa menulis ke folder (Imaging Edge Desktop atau digiCamControl).
 - Satu laptop menangani satu sesi aktif pada satu waktu (tidak ada dua sesi paralel di v1).
 
 ## 11. Metrik Keberhasilan
@@ -118,7 +118,7 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 |---|---|
 | Wifi venue mati total | Foto tetap tersimpan di kartu SD kamera dan local archive; upload menyusul begitu koneksi kembali |
 | Kuota Drive penuh di tengah event | Cek kuota sebelum event, siapkan akun dengan storage cukup |
-| Kamera tidak kompatibel dengan digiCamControl | Verifikasi daftar kamera yang didukung sebelum hari-H |
+| Kamera tidak kompatibel dengan aplikasi tethering | Verifikasi dengan kamera terpasang sebelum hari-H; ada jalur cadangan (digiCamControl, qDslrDashboard) |
 | Link "anyone with link" berpotensi diakses pihak tak diundang | ID folder Drive acak & tidak terindeks mesin pencari; link hanya disebar lewat QR fisik ke tamu terkait |
 
 ## 13. Referensi

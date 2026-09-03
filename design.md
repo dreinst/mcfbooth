@@ -5,15 +5,61 @@ ada di `prd-sistem-photobooth.md`; yang mengatur *bagaimana* sistemnya tersusun 
 `arsitektur-sistem-photobooth.md`. Kalau ketiganya berselisih, PRD menang soal lingkup,
 arsitektur menang soal data, dokumen ini menang soal tampilan.
 
-Prototipe yang bisa dibuka ada di `prototipe/index.html` — empat halaman operator
-plus halaman layar tamu, tanpa koneksi internet sama sekali. Ia harus dilayani lewat
-HTTP (`python3 -m http.server` dari dalam foldernya), bukan dibuka sebagai berkas:
-sinkronisasi dua jendela memakai BroadcastChannel, yang tidak berbagi origin di `file://`.
+Tampilannya hidup di `web/` — empat halaman operator plus halaman layar tamu — dan
+disajikan server FastAPI di `http://127.0.0.1:8000/`. Rujukan `prototipe/…` di bagian
+§4–§5 menunjuk berkas lama yang sudah digantikan `web/` dengan nama yang sama
+(`index.html`, `riwayat.html`, `layar-tamu.html`, `pengaturan.html`, `tamu.html`);
+lihat §0 untuk yang berubah.
 
 Rujukan berbentuk `photobooth_*/code.html:<baris>` dan `kinetic_operator/DESIGN.md:<baris>`
 menunjuk ke isi `design md.zip` — desain lama hasil Stitch, relatif terhadap folder
 `stitch_modern_color_palette_branding/` di dalam arsip itu. Ekstrak arsipnya kalau mau
 memeriksa sendiri.
+
+---
+
+## 0. Revisi v1.1 — yang berubah sejak dokumen ini ditulis
+
+Dokumen di bawah ini ditulis untuk prototipe di `prototipe/`. Sejak v1.1 tampilannya
+hidup di `web/`, disajikan server FastAPI di `/`, dan membaca semua keadaan dari server.
+Empat keputusan pemilik proyek yang menggantikan bagian tertentu di bawah:
+
+**Tema gelap, bukan terang.** §1 memilih tema terang dan mencatat silau sebagai risiko
+pertama. Rujukan visual barunya adalah halaman capture Rollbooth: kanvas gelap, satu
+aksen bercahaya untuk aksi utama, tipografi besar, foto yang "mengapung". Aturan lain di
+§2 tetap berlaku — satu warna satu arti, kontras ≥ 4,5:1, radius dan spasi dari skala yang
+sama, gerak hanya `transform`/`opacity`, kartu QR selalu hitam di atas putih. Token
+lengkapnya di `web/ui.css`.
+
+**Kedua jendela mengikuti server, bukan saling mengirim pesan.** BroadcastChannel di
+prototipe dihapus. Jendela tamu membaca `GET /api/tampilan-tamu` dan berlangganan
+`/api/peristiwa-tamu`; jendela operator berlangganan `/api/peristiwa`. Koneksi tamu yang
+hidup itulah yang menyalakan chip "Layar tamu terhubung" (§8). Cuplikan di panel
+operator memuat `/tamu?cermin=1` dan sengaja tidak dihitung sebagai jendela tamu.
+
+**Semua tuntutan §8 sudah ada di server**, dengan nama rute yang sedikit berbeda dari
+tabelnya: thumbnail lewat `/api/thumb/{session_code}/{nama}`, layar tamu di `/tamu`,
+dan dua aliran SSE (operator dan tamu) alih-alih satu. Ditambah yang tidak diminta §8
+tapi dibutuhkan alur galat: `POST /api/sessions/{id}/drive` (pasang folder ke sesi yang
+dimulai saat Drive putus), `POST /api/sessions/{id}/tampilkan-qr` (Riwayat → monitor
+tamu), dan `/api/drive/login` (OAuth dari Pengaturan, bukan di tengah request).
+
+**Sesi tertinggal punya ambang.** §4.1 menyebut pita tertinggal muncul "saat aplikasi
+dibuka". Di v1.1: sesi aktif yang masih hangat (foto terakhir atau mulai dalam 10 menit)
+langsung dilanjutkan — operator hanya berpindah halaman; yang sudah dingin baru diberi
+pita lanjutkan/akhiri, dan tombol Mulai Sesi nonaktif dengan alasan sampai pita itu
+ditindak.
+
+**Wifi putus tidak menghalangi Mulai Sesi.** §4.1 menjadikan "Drive tidak terhubung"
+penghalang merah. Di v1.1 yang menghalangi hanya keadaan yang tidak pulih sendiri (belum
+login, kredensial tidak ada, token ditolak); wifi putus menjadi peringatan kuning, karena
+arsip lokal dan penjaga latar memang dibangun untuk kasus itu — foto diupload sendiri
+begitu Drive terjangkau.
+
+Yang di §10 sudah selesai: font di-bundle di `web/fonts/`, QR sungguhan dari
+`qr_codes/`, data nyata dari server, keadaan memuat memakai kerangka di Riwayat, alur
+"Upload sisanya" memberi umpan balik lewat toast dan chip baris. Yang belum: tema terang
+sebagai opsi, dan uji silau di venue nyata — sekarang dengan arah sebaliknya.
 
 ---
 
@@ -29,7 +75,7 @@ tanpa tema gelap.
 Yang paling menentukan bentuknya: **akan ada monitor kedua khusus untuk tamu.** Dua
 layar hidup bersamaan — panel operator tetap di laptop, layar tamu jadi jendela terpisah
 yang di-fullscreen di monitor kedua. Operator tidak pernah memutar laptopnya. Arsitektur
-menyebut layar terpisah sebagai kandidat v2 (`arsitektur-sistem-photobooth.md:155`);
+menyebut layar terpisah sebagai kandidat v2 (arsitektur §9);
 keputusan ini memindahkannya ke v1.
 
 Dua turunannya diputuskan bersamaan. Selama sesi berjalan, monitor kedua menampilkan
@@ -109,9 +155,7 @@ Skala:
 Semua angka pakai `font-variant-numeric: tabular-nums` supaya kolom tidak bergoyang
 saat penghitung berubah.
 
-Berkas font di-bundle lokal di `app/static/fonts/`. Selama berkasnya belum ada,
-prototipe jatuh ke font sistem — ini tercatat sebagai pekerjaan yang belum selesai
-di §9.
+Berkas font di-bundle lokal di `web/fonts/` (woff2, subset latin).
 
 ### 2.4 Warna
 
@@ -273,7 +317,7 @@ tanpa folder tujuan menghasilkan foto yang tidak akan pernah sampai ke tamu. Tom
 tetap terlihat dengan alasannya tertulis di bawahnya.
 
 Input nama menampilkan keterangan kalau nama serupa sudah dipakai hari ini. `session_code`
-dijamin unik oleh timestamp berpresisi detik (`arsitektur-sistem-photobooth.md:65`), jadi
+dijamin unik oleh timestamp berpresisi detik (arsitektur §3.3), jadi
 tabrakan nama tidak merusak data — yang rusak adalah pencarian di Riwayat berbulan-bulan
 kemudian.
 Keterangan ini mendorong operator menambahkan pembeda saat mengetik, bukan menyesalinya
@@ -295,7 +339,7 @@ merusak.
 
 Tiga penghitung sejajar: sudah di Drive, sedang diupload, gagal. Yang ketiga inilah
 yang hilang sepenuhnya dari design lama, padahal `photo_uploads.status` punya nilai
-`failed` (`arsitektur-sistem-photobooth.md:83`) dan §3.2 poin 5 menyebut foto gagal
+`failed` (arsitektur §3.3) dan §3.2 menyebut foto gagal
 harus ditampilkan di UI operator supaya bisa di-retry manual sebelum sesi ditutup.
 
 Perilaku penghitung gagal:
@@ -380,7 +424,7 @@ sebagai bermasalah berhari-hari kemudian, bukan hanya selama sesinya berjalan, d
 barisnya menawarkan "Upload sisanya".
 
 Status `Archived` di `photobooth_riwayat_sesi/code.html:238` dihapus. Kolom `status`
-hanya punya `active` dan `done` (`arsitektur-sistem-photobooth.md:69`); menampilkan
+hanya punya `active` dan `done` (arsitektur §3.3); menampilkan
 nilai ketiga yang tidak ada di skema membuat operator menebak artinya.
 
 Selain "Tampilkan QR", tiap baris menyediakan "Salin tautan" — lebih berguna daripada
@@ -522,12 +566,13 @@ tinggi daripada layar bisa digulir di dalam lapisannya sendiri; sebelum diperbai
 dialog "berisiko" setinggi 675px di layar 667px membuat tombol utamanya tidak terjangkau
 sama sekali.
 
-Tidak ada halaman yang menggulir horizontal di 375, 768, 900, 1024, dan 1280 — diperiksa
-otomatis pada 13 kombinasi layar dan varian.
+Tidak ada halaman yang menggulir horizontal di 390, 900, dan 1366 — diperiksa lewat
+tangkapan layar Chrome headless saat revisi v1.1, bukan skrip yang ikut di repo.
 
-Kontras minimum 4,5:1 untuk semua teks, angkanya di §2.4. Pemeriksaan yang sama juga
-menghitung tinggi setiap tombol, tautan, dan input (tidak ada yang di bawah 44px) dan
-memastikan tiap elemen yang bisa dijangkau papan ketik punya cincin fokus 3px.
+Kontras minimum 4,5:1 untuk semua teks. Angka di §2.4 milik palet terang lama; palet
+gelap v1.1 di `web/ui.css` memakai teks gelap di atas latar merah/aksen justru supaya
+ambang ini terpenuhi. Tinggi tombol, tautan, dan input (tidak ada yang di bawah 44px) dan
+cincin fokus 3px diperiksa manual.
 
 Tombol yang dinonaktifkan memakai `aria-disabled`, bukan atribut `disabled`. Atribut
 `disabled` mengeluarkan tombol dari urutan tab, jadi pemakai papan ketik tidak akan
@@ -557,10 +602,10 @@ Skema database tidak perlu berubah.
 | Keadaan layar tamu | `GET /api/tampilan-tamu` — keadaan (`sambutan`/`memotret`/`qr`), nama tamu, daftar thumbnail, tautan QR | 04, 02 |
 | Aliran perubahan | Server-Sent Events di `/api/peristiwa` — jendela tamu berganti keadaan tanpa polling, jendela operator ikut memperbarui angkanya | 02, 04 |
 | Jendela tamu terdeteksi | server mencatat koneksi SSE dari `/tamu` yang masih hidup, dipakai untuk chip "Terhubung" dan barisnya di pemeriksaan awal | 01, 02 |
-| Aset front-end lokal | `app/static/` berisi CSS, JS, dan font woff2 | semua |
+| Aset front-end lokal | `web/` berisi CSS, JS, dan font woff2 | semua |
 | Layar tidak tidur | Screen Wake Lock API, dipegang selama jendela tamu terbuka | 04 |
 
-Thumbnail dibuat dari berkas yang sudah ada di `local_archive` (`arsitektur-sistem-photobooth.md:51`),
+Thumbnail dibuat dari berkas yang sudah ada di `local_archive` (arsitektur §3.2),
 jadi tidak menambah lapis penyimpanan baru dan tidak menyentuh berkas aslinya. Ukuran
 sisi panjang 400px cukup untuk grid operator; layar tamu memakai berkas yang sama, dan
 di monitor 1080p tile selebar 300px masih tajam.
@@ -582,7 +627,7 @@ menangkap keduanya.
 |---|---|
 | Halaman Hardware Status | Baterai, suhu, dan kecepatan jaringan tidak punya sumber data di arsitektur. Diganti pemeriksaan awal di layar idle. |
 | Status printer & tombol print per foto | PRD `prd-sistem-photobooth.md:51` menyatakan pencetakan foto tidak termasuk v1. |
-| Tombol "Clear Cache" | `photobooth_hardware_status/code.html:335-337`. Local archive adalah lapis backup kedua (`arsitektur-sistem-photobooth.md:128`) dan FR8 melarang penghapusan sebelum upload terkonfirmasi. Tombol itu satu klik dari menghapus lapis pengaman. |
+| Tombol "Clear Cache" | `photobooth_hardware_status/code.html:335-337`. Local archive adalah lapis backup kedua (arsitektur §6) dan FR8 melarang penghapusan sebelum upload terkonfirmasi. Tombol itu satu klik dari menghapus lapis pengaman. |
 | Login, profil operator, Log Out | Tidak ada autentikasi di PRD. NFR4 justru menyatakan aplikasi hanya diakses lokal oleh operator. |
 | Isi sidebar lama (Dashboard, Hardware, Log Out) | Ketiganya tidak menuju ke apa pun yang nyata. Sidebarnya sendiri dipertahankan dengan empat tujuan yang punya isi — lihat §3. |
 | Footer `v2.4.0-build.88`, "API: Connected" | Tidak memberi informasi yang bisa ditindaklanjuti, dan isinya statis di design lama. Diganti ringkasan kesehatan di kaki sidebar. |
@@ -598,9 +643,8 @@ Nama produk diseragamkan menjadi "MCF Photobooth". Design lama memakai "MCF Boot
 
 ## 10. Yang belum selesai
 
-Berkas font Hanken Grotesk dan JetBrains Mono belum ada di repo. Sampai woff2-nya
-ditaruh di `app/static/fonts/`, prototipe memakai font sistem dan tipografi yang
-terlihat sekarang bukan tipografi yang dimaksud dokumen ini.
+~~Berkas font Hanken Grotesk dan JetBrains Mono belum ada di repo.~~ Sudah ada di
+`web/fonts/` sejak v1.1.
 
 QR di `prototipe/tamu.html` adalah gambar contoh dan tidak bisa dipindai. Ia ada
 untuk menilai ukuran dan tata letak; di produksi gambarnya datang dari
