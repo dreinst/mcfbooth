@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor tamu — MCF Photobooth</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+
+<div class="guest" data-tamu>
+
+  <div data-variant="sambutan" class="is-on">
+    <h1 class="guest-wordmark"><span class="mark" aria-hidden="true"></span> MCF Photobooth</h1>
+    <p class="guest-lead">
+      Silakan mendekat. Foto kamu akan muncul di layar ini, dan kode untuk mengunduhnya tampil setelah sesi selesai.
+    </p>
+  </div>
+
+  <div data-variant="memotret">
+    <p class="guest-kicker"><span class="dot dot-live" style="display:inline-block;vertical-align:middle;margin-right:.8vw"></span>Sedang memotret</p>
+    <h1 class="guest-name" data-t-nama>—</h1>
+    <p class="guest-sub"><span class="num" data-t-jumlah>0</span> foto sejauh ini</p>
+    <div class="guest-empty" data-t-kosong>Jepretan pertama akan muncul di sini</div>
+    <div class="guest-grid" data-t-grid hidden></div>
+    <p class="guest-note"><span class="dot dot-accent"></span> Kode untuk mengunduh tampil setelah sesi selesai</p>
+  </div>
+
+  <div data-variant="qr">
+    <p class="guest-kicker">Foto kamu sudah siap</p>
+    <h1 class="guest-name" data-q-nama>—</h1>
+    <p class="guest-sub"><span class="num" data-q-jumlah>0</span> foto siap diunduh</p>
+    <div class="qr-card" data-qr-card>
+      <img data-qr-img alt="Kode QR menuju folder foto" width="620" height="620">
+      <span data-qr-teks hidden>QR belum tersedia. Pakai tautan di bawah.</span>
+    </div>
+    <p class="guest-instruction">Buka kamera HP, arahkan ke kode ini</p>
+    <p class="guest-link" data-q-link></p>
+    <div class="guest-strip" data-q-strip aria-label="Cuplikan foto sesi ini"></div>
+    <p class="guest-foot">Foto tetap ada di folder ini setelah acara selesai. Simpan tautannya kalau mau mengunduh nanti.</p>
+  </div>
+
+  <p class="guest-status" aria-hidden="true"><span class="dot dot-idle" data-t-status-dot></span><span data-t-status>menyambung…</span></p>
+  <button class="guest-exit" type="button" data-keluar aria-label="Tekan tahan dua detik untuk kembali ke panel operator" tabindex="-1"></button>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

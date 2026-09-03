@@ -32,6 +32,10 @@ tether_dropbox/
 *.ARW
 *.arw
 *.png
-!prototipe/favicon mcf.jpeg
-!prototipe/qr-contoh.svg
 !simulasi/local_archive/Budi_Ani_20260811_115043/*.JPG
+
+# Aset tampilan yang memang harus ikut repo.
+!web/favicon.svg
+
+# Saklar mode uji Drive palsu.
+drive-palsu-mati

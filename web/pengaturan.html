@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pengaturan — MCF Photobooth</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="mark" aria-hidden="true"></span> MCF Photobooth <small>v1.1</small></div>
+    <nav class="nav" aria-label="Navigasi utama">
+      <a href="index.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.2 6.6h2.4l1.1-1.8h6.6l1.1 1.8h2.4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.9" stroke="currentColor" stroke-width="1.5"/></svg></span>Sesi</a>
+      <a href="riwayat.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7.4" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.8v4.5l3 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Riwayat<span class="nav-badge" data-badge-riwayat></span></a>
+      <a href="layar-tamu.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2.6" y="3.4" width="14.8" height="10" rx="1.4" stroke="currentColor" stroke-width="1.5"/><path d="M7 16.6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 13.4v3.2" stroke="currentColor" stroke-width="1.6"/></svg></span>Layar tamu</a>
+      <a href="pengaturan.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.6v2m0 10.8v2M17.4 10h-2M4.6 10h-2m12.2-5.2-1.4 1.4M6.8 13.2l-1.4 1.4m0-9.8 1.4 1.4m6.4 6.4 1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Pengaturan</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="health">
+        <span class="health-title">Kesehatan sistem</span>
+        <div class="health-row"><span class="dot dot-idle" data-health-drive-dot></span> Google Drive <span class="val" data-health-drive>memeriksa…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-internet-dot></span> Internet <span class="val" data-health-internet>…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-disk-dot></span> Disk lokal <span class="val" data-health-disk>…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-tamu-dot></span> Layar tamu <span class="val" data-health-tamu>…</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="appbar">
+      <div>
+        <h1 class="page-title">Pengaturan</h1>
+        <p class="page-sub">Akun Drive, folder, dan perilaku upload. Nilai folder diatur lewat berkas .env.</p>
+      </div>
+      <div class="topbar-spacer"></div>
+      <span class="chip chip-bad" data-chip-server hidden><span class="dot dot-bad"></span> Terputus dari server</span>
+      <span class="chip chip-idle" data-chip-tamu="pendek"><span class="dot dot-idle"></span> Belum dibuka</span>
+    </header>
+
+    <main class="page">
+      <div class="wrap-narrow stack-24" data-pengaturan>
+
+        <section class="card card-hero">
+          <div class="row-between">
+            <span class="section-label" style="margin:0">Google Drive</span>
+            <span class="chip chip-idle" data-drive-chip><span class="dot dot-idle"></span> memeriksa…</span>
+          </div>
+          <div class="row-between" style="margin-top:14px">
+            <div style="min-width:0">
+              <div class="h2" data-p="email">—</div>
+              <div class="mono-plain subtle" style="margin-top:4px">scope <span data-p="scope">drive.file</span> — hanya folder buatan aplikasi ini yang terlihat</div>
+              <p class="btn-reason" data-drive-pesan style="margin-top:8px"></p>
+            </div>
+            <div class="stack-8">
+              <div class="row">
+                <button class="btn btn-primary" type="button" data-drive-login data-butuh-server>Login Google</button>
+                <button class="btn btn-quiet" type="button" data-drive-logout data-butuh-server aria-disabled="true">Ganti akun</button>
+              </div>
+              <p class="btn-reason is-quiet" data-drive-login-alasan hidden></p>
+              <p class="btn-reason is-quiet" data-drive-logout-alasan hidden></p>
+            </div>
+          </div>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between" style="margin-bottom:8px">
+            <span class="small muted">Kuota terpakai</span>
+            <span class="mono-plain num" data-p="kuota">—</span>
+          </div>
+          <div class="meter" data-kuota-meter></div>
+          <p class="small subtle" style="margin-top:12px" data-p="kuota-sisa">—</p>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between">
+            <div>
+              <div class="body"><strong>Struktur folder di Drive</strong></div>
+              <div class="small subtle" style="margin-top:4px" data-p="struktur">—</div>
+            </div>
+          </div>
+          <div class="stack-8" style="margin-top:14px">
+            <div class="row-between"><span class="small muted">Folder induk</span><span class="mono-plain" data-p="root">—</span></div>
+            <div class="row-between"><span class="small muted">Subfolder QR</span><span class="mono-plain" data-p="folder-qr">—</span></div>
+            <div class="row-between"><span class="small muted">Subfolder sesi</span><span class="mono-plain" data-p="folder-result">—</span></div>
+            <div class="row-between"><span class="small muted">credentials.json</span><span class="mono-plain" style="overflow-wrap:anywhere;text-align:right" data-p="credentials">—</span></div>
+            <div class="row-between"><span class="small muted">token.json</span><span class="mono-plain" style="overflow-wrap:anywhere;text-align:right" data-p="token">—</span></div>
+          </div>
+          <p class="small subtle" style="margin-top:14px">
+            Login membuka browser bawaan laptop. Pilih akun Gmail yang akan menampung foto acara. Token disimpan di laptop ini saja dan tidak pernah ikut ke GitHub.
+          </p>
+        </section>
+
+        <section class="card">
+          <span class="section-label">Kamera &amp; folder</span>
+          <div class="stack-12" style="margin-top:12px">
+            <div class="row-between">
+              <div><div class="body"><strong>Kamera</strong></div><div class="small subtle" data-p="kamera">—</div></div>
+              <span class="mono-plain subtle" data-p="tethering">—</span>
+            </div>
+            <hr class="rule">
+            <div>
+              <div class="body"><strong>Folder tethering</strong></div>
+              <div class="mono-plain subtle" style="margin-top:4px;overflow-wrap:anywhere" data-p="tether">—</div>
+              <div class="small subtle" style="margin-top:4px">arahkan aplikasi tethering kamera ke folder ini</div>
+            </div>
+            <hr class="rule">
+            <div>
+              <div class="body"><strong>Arsip lokal</strong></div>
+              <div class="mono-plain subtle" style="margin-top:4px;overflow-wrap:anywhere" data-p="arsip">—</div>
+              <div class="small subtle" style="margin-top:4px"><span data-p="disk">—</span> · tidak pernah dihapus otomatis</div>
+            </div>
+            <hr class="rule">
+            <div class="row-between">
+              <div><div class="body"><strong>Thumbnail &amp; QR</strong></div><div class="mono-plain subtle" style="margin-top:4px;overflow-wrap:anywhere"><span data-p="thumbs">—</span><br><span data-p="qr">—</span></div></div>
+            </div>
+            <hr class="rule">
+            <div class="row-between">
+              <div><div class="body"><strong>Database sesi</strong></div><div class="mono-plain subtle" style="margin-top:4px;overflow-wrap:anywhere" data-p="db">—</div></div>
+            </div>
+          </div>
+          <div class="banner banner-wait" style="margin-top:18px">
+            <div class="banner-body">
+              <div class="banner-title">Tidak ada tombol hapus arsip di sini</div>
+              <div class="banner-text">Arsip lokal adalah lapis backup kedua setelah kartu SD. Pembersihannya dilakukan manual lewat Explorer, sengaja tidak disediakan di aplikasi.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <span class="section-label">Upload</span>
+          <div class="stack-12" style="margin-top:12px">
+            <div class="row-between">
+              <div><div class="body"><strong>Percobaan ulang otomatis</strong></div><div class="small subtle" style="margin-top:4px">jeda sebelum ditandai gagal</div></div>
+              <span class="chip chip-idle" data-p="retry">—</span>
+            </div>
+            <hr class="rule">
+            <div class="row-between">
+              <div><div class="body"><strong>Tenggang setelah Selesai</strong></div><div class="small subtle" style="margin-top:4px">jepretan yang mendarat dalam tenggang ini masih ikut sesi yang baru diakhiri</div></div>
+              <span class="chip chip-idle" data-p="tenggang">—</span>
+            </div>
+            <hr class="rule">
+            <div class="row-between">
+              <div><div class="body"><strong>Deteksi berkas selesai ditulis</strong></div><div class="small subtle" style="margin-top:4px">ukuran berkas tidak berubah selama</div></div>
+              <span class="chip chip-idle" data-p="stabil">—</span>
+            </div>
+            <hr class="rule">
+            <div class="row-between">
+              <div><div class="body"><strong>Izin folder sesi</strong></div><div class="small subtle" style="margin-top:4px">siapa pun dengan tautan hanya bisa melihat, tidak bisa menghapus</div></div>
+              <span class="chip chip-ok"><span class="dot dot-ok"></span> Viewer</span>
+            </div>
+            <hr class="rule">
+            <div class="row-between">
+              <div><div class="body"><strong>Mulai sesi tanpa Drive</strong></div><div class="small subtle" style="margin-top:4px">MCF_IZINKAN_TANPA_DRIVE di .env, hanya untuk uji coba</div></div>
+              <span class="chip chip-idle" data-p="tanpa-drive">—</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <span class="section-label">Layar tamu</span>
+          <div class="row-between" style="margin-top:12px">
+            <div><div class="body"><strong>Monitor kedua</strong></div><div class="small subtle" style="margin-top:4px">1080 × 1920 portrait — <span data-p="layar-tamu">—</span></div></div>
+            <button class="btn btn-sm" type="button" data-buka-tamu>Buka jendela</button>
+          </div>
+          <hr class="rule" style="margin:18px 0">
+          <div class="row-between">
+            <div><div class="body"><strong>QR bertahan sampai</strong></div><div class="small subtle" style="margin-top:4px">sesi berikutnya dimulai, tanpa hitung mundur</div></div>
+            <span class="chip chip-idle">Sesi berikutnya</span>
+          </div>
+        </section>
+
+        <p class="small subtle" style="margin:0">MCF Photobooth <span data-p="versi">—</span> · internet <span data-p="internet">—</span> · nilai folder diubah lewat berkas <span class="mono-plain">.env</span> lalu server dimulai ulang.</p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sesi — MCF Photobooth</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="mark" aria-hidden="true"></span> MCF Photobooth <small>v1.1</small></div>
+    <nav class="nav" aria-label="Navigasi utama">
+      <a href="index.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.2 6.6h2.4l1.1-1.8h6.6l1.1 1.8h2.4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.9" stroke="currentColor" stroke-width="1.5"/></svg></span>Sesi</a>
+      <a href="riwayat.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7.4" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.8v4.5l3 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Riwayat<span class="nav-badge" data-badge-riwayat></span></a>
+      <a href="layar-tamu.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2.6" y="3.4" width="14.8" height="10" rx="1.4" stroke="currentColor" stroke-width="1.5"/><path d="M7 16.6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 13.4v3.2" stroke="currentColor" stroke-width="1.6"/></svg></span>Layar tamu</a>
+      <a href="pengaturan.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.6v2m0 10.8v2M17.4 10h-2M4.6 10h-2m12.2-5.2-1.4 1.4M6.8 13.2l-1.4 1.4m0-9.8 1.4 1.4m6.4 6.4 1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Pengaturan</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="health">
+        <span class="health-title">Kesehatan sistem</span>
+        <div class="health-row"><span class="dot dot-idle" data-health-drive-dot></span> Google Drive <span class="val" data-health-drive>memeriksa…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-internet-dot></span> Internet <span class="val" data-health-internet>…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-disk-dot></span> Disk lokal <span class="val" data-health-disk>…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-tamu-dot></span> Layar tamu <span class="val" data-health-tamu>…</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="appbar">
+      <div>
+        <h1 class="page-title">Sesi</h1>
+        <p class="page-sub">Ketik nama, motret, tekan Selesai. Tiga aksi per tamu.</p>
+      </div>
+      <div class="topbar-spacer"></div>
+      <span class="chip chip-bad" data-chip-server hidden><span class="dot dot-bad"></span> Terputus dari server</span>
+      <span class="chip chip-idle" data-chip-sesi hidden><span class="dot dot-live"></span> Sesi berjalan</span>
+      <span class="chip chip-idle" data-chip-upload aria-live="polite"><span class="dot dot-idle"></span> Belum ada sesi</span>
+      <span class="chip chip-idle" data-chip-tamu><span class="dot dot-idle"></span> Layar tamu belum dibuka</span>
+    </header>
+
+    <main class="page">
+      <div class="wrap" data-sesi data-tahap-aktif="idle">
+
+      <!-- ============================================================ idle -->
+      <section data-tahap="idle" class="stack-24">
+
+        <div data-tertinggal hidden>
+          <div class="banner banner-accent">
+            <svg class="banner-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8.2" stroke="currentColor" stroke-width="1.6"/><path d="M10 6v4.5l2.8 1.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <div class="banner-body">
+              <div class="banner-title">Ada sesi yang belum diakhiri: <span data-tt-nama></span></div>
+              <div class="banner-text" data-tt-info></div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn btn-sm btn-primary" type="button" data-tt-lanjut data-butuh-server>Lanjutkan sesi ini</button>
+                <button class="btn btn-sm" type="button" data-tt-akhiri data-butuh-server>Akhiri sekarang</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div data-pita-tanpa-sesi hidden>
+          <div class="banner banner-wait">
+            <svg class="banner-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.4 2.8 16h14.4L10 3.4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8.2v3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="13.6" r=".95" fill="currentColor"/></svg>
+            <div class="banner-body">
+              <div class="banner-title"><span data-n-tanpa-sesi>0</span> foto masuk saat tidak ada sesi</div>
+              <div class="banner-text">Diamankan di <span class="mono-plain">local_archive/_tanpa_sesi/</span>. Tidak diupload ke mana pun — pindahkan manual ke folder Drive tamu yang benar. Jepretan uji sebelum tamu pertama juga berakhir di sini.</div>
+              <div class="row" style="margin-top:12px"><button class="btn btn-sm" type="button" data-akui-tanpa-sesi data-butuh-server>Mengerti, sembunyikan</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="card card-hero">
+            <span class="section-label">Sesi baru</span>
+            <h2 class="h1">Siapa yang difoto?</h2>
+            <p class="body muted" style="margin-top:8px">Nama ini yang dipakai untuk mencari sesi kalau QR-nya hilang.</p>
+
+            <div style="margin-top:24px">
+              <label class="field-label" for="inputNama">Nama tamu</label>
+              <input class="input" id="inputNama" type="text" placeholder="mis. Budi &amp; Ani" autocomplete="off" maxlength="120">
+              <p class="field-hint" data-hint-nama aria-live="polite"></p>
+            </div>
+
+            <button class="btn btn-primary btn-lg btn-block" type="button" id="btnMulai" style="margin-top:16px" aria-disabled="true" data-butuh-server>
+              Mulai Sesi
+              <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h11m0 0-4.2-4.2M15 10l-4.2 4.2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <p class="btn-reason" data-alasan-mulai hidden></p>
+            <p class="small subtle" style="margin-top:16px">Folder Drive dan QR dibuat saat itu juga. Kamu tinggal motret; foto naik sendiri.</p>
+          </div>
+
+          <div class="card">
+            <div class="row-between" style="margin-bottom:12px">
+              <span class="section-label" style="margin:0">Sebelum mulai</span>
+              <span class="mono subtle">diperbarui tiap 15 detik</span>
+            </div>
+            <ul class="check-list" data-preflight>
+              <li data-cek="drive"><span class="check-icon is-idle"></span><span class="check-body"><span class="check-name">Google Drive terhubung</span><span class="check-value">memeriksa…</span></span></li>
+              <li data-cek="kuota"><span class="check-icon is-idle"></span><span class="check-body"><span class="check-name">Kuota Drive</span><span class="check-value">memeriksa…</span></span></li>
+              <li data-cek="tether"><span class="check-icon is-idle"></span><span class="check-body"><span class="check-name">Folder tethering terpantau</span><span class="check-value">memeriksa…</span></span></li>
+              <li data-cek="internet"><span class="check-icon is-idle"></span><span class="check-body"><span class="check-name">Koneksi internet</span><span class="check-value">memeriksa…</span></span></li>
+              <li data-cek="disk"><span class="check-icon is-idle"></span><span class="check-body"><span class="check-name">Ruang disk lokal</span><span class="check-value">memeriksa…</span></span></li>
+              <li data-cek="tamu"><span class="check-icon is-idle"></span><span class="check-body"><span class="check-name">Layar tamu</span><span class="check-value">memeriksa…</span></span></li>
+            </ul>
+            <hr class="rule" style="margin:16px 0">
+            <div class="row">
+              <button class="btn btn-sm" type="button" data-buka-tamu>Buka jendela layar tamu</button>
+              <a class="btn btn-sm btn-quiet" href="pengaturan.html">Pengaturan Drive</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================================================== aktif -->
+      <section data-tahap="aktif" class="stack-24" hidden>
+
+        <div class="card card-hero">
+          <div class="row-top">
+            <div style="min-width:0">
+              <span class="section-label" style="margin-bottom:6px" data-durasi>Sesi aktif</span>
+              <h2 class="display" data-nama-tamu>…</h2>
+              <p class="mono-plain subtle" style="margin:10px 0 0;overflow-wrap:anywhere" data-kode-sesi>…</p>
+            </div>
+            <div style="flex:0 0 auto">
+              <button class="btn btn-primary btn-lg" type="button" id="btnSelesai" data-butuh-server>
+                Selesai
+                <svg width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 10.5l3.2 3.2L15.5 6.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <p class="btn-reason" data-alasan-selesai hidden></p>
+            </div>
+          </div>
+        </div>
+
+        <div data-pita-putus role="status" hidden>
+          <div class="banner banner-bad">
+            <svg class="banner-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8.2" stroke="currentColor" stroke-width="1.6"/><path d="M7.3 7.3l5.4 5.4M12.7 7.3l-5.4 5.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <div class="banner-body">
+              <div class="banner-title">Terputus dari server — angka di layar berumur <span data-umur-putus>…</span></div>
+              <div class="banner-text">Sesi kemungkinan besar masih berjalan di latar. Jangan tutup jendela ini dan jangan mulai sesi baru.</div>
+              <div class="row" style="margin-top:14px"><button class="btn btn-sm" type="button" data-sambung-ulang>Coba sambung ulang</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div data-pita-drive hidden>
+          <div class="banner banner-wait">
+            <svg class="banner-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3.4 2.8 16h14.4L10 3.4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 8.2v3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="10" cy="13.6" r=".95" fill="currentColor"/></svg>
+            <div class="banner-body">
+              <div class="banner-title">Sesi ini belum punya folder Drive</div>
+              <div class="banner-text">Drive tidak terjangkau saat sesi dimulai. Foto tetap diarsipkan di laptop dan menunggu. Begitu Drive tersambung, foldernya dipasang otomatis — atau tekan tombol ini.</div>
+              <div class="row" style="margin-top:14px"><button class="btn btn-sm" type="button" data-pasang-drive data-butuh-server>Pasang folder Drive sekarang</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div data-pita-gagal role="status" hidden>
+          <div class="banner banner-bad">
+            <svg class="banner-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="8.2" stroke="currentColor" stroke-width="1.6"/><path d="M7.3 7.3l5.4 5.4M12.7 7.3l-5.4 5.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+            <div class="banner-body">
+              <div class="banner-title" data-judul-gagal></div>
+              <div class="banner-text">Berkasnya masih aman di laptop. Kalau QR ditampilkan sekarang, foto ini tidak akan terlihat oleh tamu.</div>
+              <div class="mono-plain" style="margin-top:12px;opacity:.9;overflow-wrap:anywhere" data-daftar-gagal></div>
+              <div class="row" style="margin-top:14px"><button class="btn btn-sm btn-danger-ghost" type="button" data-retry-semua data-butuh-server>Coba lagi semuanya</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="counters">
+          <div class="counter counter-terakhir is-idle" data-kartu-terakhir>
+            <span class="chip chip-idle" data-chip-terakhir><span class="dot dot-idle"></span> Menunggu</span>
+            <div class="counter-n num" data-n-terakhir>—</div>
+            <div class="counter-label" data-label-terakhir>Belum ada foto masuk</div>
+            <div class="counter-meta" data-meta-terakhir>menunggu jepretan pertama</div>
+          </div>
+          <div class="counter counter-ok">
+            <span class="chip chip-ok"><span class="dot dot-ok"></span> Aman</span>
+            <div class="counter-n num" data-n-ok>0</div>
+            <div class="counter-label">Sudah di Drive</div>
+            <div class="counter-meta">bisa diakses tamu begitu QR muncul</div>
+          </div>
+          <div class="counter counter-wait">
+            <span class="chip chip-wait"><span class="dot dot-wait"></span> Antre</span>
+            <div class="counter-n num" data-n-antre>0</div>
+            <div class="counter-label">Sedang diupload</div>
+            <div class="counter-meta">retry otomatis 1, 5, lalu 15 detik</div>
+          </div>
+          <div class="counter counter-bad-zero" data-kartu-gagal>
+            <span class="chip chip-idle" data-chip-gagal><span class="dot dot-idle"></span> Tidak ada</span>
+            <div class="counter-n num" data-n-gagal>0</div>
+            <div class="counter-label">Gagal</div>
+            <div class="counter-meta" data-meta-gagal>semua percobaan upload berhasil</div>
+          </div>
+        </div>
+
+        <div class="split-mirror">
+          <div class="stack-24">
+            <section class="card card-tight">
+              <div class="row-between" style="margin-bottom:8px">
+                <span class="mono subtle">Antrean upload</span>
+                <span class="mono subtle num" data-rasio>0 / 0</span>
+              </div>
+              <div class="meter" data-meter></div>
+              <p class="small subtle" style="margin:14px 0 0">
+                Tiga penghitung kanan dihitung dari berkas yang dilihat pemantau folder, jadi ketiganya bisa cocok satu sama lain dan tetap salah.
+                Penghitung paling kiri yang memberi tahu kalau tethering berhenti mengirim.
+              </p>
+            </section>
+
+            <section class="card">
+              <div class="row-between" style="margin-bottom:18px">
+                <h3 class="h2">Foto yang masuk</h3>
+                <span class="mono subtle num" data-jumlah-foto>0 foto</span>
+              </div>
+              <div class="empty" data-grid-kosong style="padding:32px 16px">
+                <div class="empty-title">Belum ada jepretan</div>
+                <div class="empty-text">Begitu kamera menjepret, fotonya muncul di sini dan di monitor tamu dalam beberapa detik.</div>
+              </div>
+              <div class="photo-grid" data-grid></div>
+            </section>
+          </div>
+
+          <section class="card card-tight">
+            <div class="row-between" style="margin-bottom:10px">
+              <span class="section-label" style="margin-bottom:0">Layar tamu</span>
+              <span class="chip chip-idle" data-chip-tamu="pendek"><span class="dot dot-idle"></span> Belum dibuka</span>
+            </div>
+            <div class="mirror mirror-sm">
+              <iframe data-src="/tamu?cermin=1" title="Cuplikan monitor kedua" tabindex="-1" scrolling="no"></iframe>
+            </div>
+            <p class="small muted" style="margin:12px 0 0">Monitor kedua menampilkan foto yang masuk. QR muncul di sana setelah kamu menekan Selesai.</p>
+            <div class="row" style="margin-top:12px"><button class="btn btn-sm" type="button" data-buka-tamu>Buka jendela</button></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ========================================================= selesai -->
+      <section data-tahap="selesai" class="wrap-narrow stack-24" hidden>
+        <div class="card card-hero">
+          <span class="chip chip-ok"><span class="dot dot-ok"></span> Sesi selesai</span>
+          <h2 class="h1" style="margin-top:14px">QR sudah tampil di monitor tamu</h2>
+          <p class="body muted" style="margin-top:10px">
+            <strong data-qr-nama></strong> · <span data-qr-jumlah></span> foto di Google Drive.
+            Kode di monitor kedua bertahan sampai kamu memulai sesi berikutnya.
+          </p>
+
+          <div data-qr-tanpa-drive hidden style="margin-top:20px">
+            <div class="banner banner-wait">
+              <div class="banner-body">
+                <div class="banner-title">Sesi ini tidak punya tautan Drive</div>
+                <div class="banner-text">Fotonya aman di arsip lokal. Pasang folder Drive begitu tersambung, lalu tekan "Upload sisanya" di Riwayat — QR-nya bisa ditampilkan ulang dari sana.</div>
+                <div class="row" style="margin-top:14px"><button class="btn btn-sm" type="button" data-pasang-drive data-butuh-server>Pasang folder Drive sekarang</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="split-mirror" style="margin-top:22px">
+            <div class="card card-tight card-sunken">
+              <span class="section-label">Tautan folder</span>
+              <p class="mono-plain" style="margin:0;overflow-wrap:anywhere" data-qr-link>…</p>
+              <div class="row" style="margin-top:16px;align-items:flex-start">
+                <span class="qr-preview"><img data-qr-img alt="QR menuju folder foto" width="176" height="176"></span>
+                <div class="stack-8">
+                  <button class="btn btn-sm" type="button" data-salin>Salin tautan</button>
+                  <a class="btn btn-sm btn-quiet" data-qr-unduh href="#" download>Unduh gambar QR</a>
+                </div>
+              </div>
+              <hr class="rule" style="margin:16px 0">
+              <p class="small subtle" style="margin:0">Sesi ini tetap bisa dicari lewat Riwayat kapan saja. QR-nya tidak perlu disimpan sekarang.</p>
+            </div>
+            <div class="mirror mirror-sm">
+              <iframe data-src="/tamu?cermin=1" title="Cuplikan monitor kedua" tabindex="-1" scrolling="no"></iframe>
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-lg btn-block" type="button" data-sesi-baru style="margin-top:22px">Mulai sesi berikutnya</button>
+        </div>
+      </section>
+
+      </div>
+
+      <dialog class="dialog" id="dialogSelesai">
+        <div data-bentuk="aman">
+          <span class="chip chip-ok"><span class="dot dot-ok"></span> Semua foto sudah sampai</span>
+          <h2 class="h1" id="judulAman" style="margin-top:14px">Akhiri sesi <span data-d-nama></span>?</h2>
+          <p class="body muted" style="margin-top:10px">
+            <span data-d-jumlah></span> foto, semuanya sudah ada di Google Drive. Setelah ini QR langsung tampil di monitor tamu.
+            Jepretan yang mendarat beberapa detik setelahnya masih ikut ke folder yang sama.
+          </p>
+          <div class="card card-tight card-sunken" style="margin-top:20px">
+            <div class="row-between"><span class="small muted">Foto masuk</span><span class="mono-plain num" data-d-jumlah></span></div>
+            <div class="row-between" style="margin-top:10px"><span class="small muted">Foto di Drive</span><span class="mono-plain num ok-text" data-d-ok></span></div>
+            <div class="row-between" style="margin-top:10px"><span class="small muted">Foto terakhir masuk</span><span class="mono-plain" data-d-terakhir></span></div>
+            <div class="row-between" style="margin-top:10px"><span class="small muted">Layar tamu</span><span class="mono-plain" data-d-tamu>…</span></div>
+          </div>
+          <div class="dialog-actions">
+            <button class="btn" type="button" data-batal>Batal, lanjut motret</button>
+            <button class="btn btn-primary" type="button" data-akhiri>Akhiri &amp; tampilkan QR</button>
+          </div>
+        </div>
+
+        <div data-bentuk="berisiko" hidden>
+          <span class="chip chip-bad"><span class="dot dot-bad"></span> <span data-d-sisa></span> foto belum sampai</span>
+          <h2 class="h1" id="judulBerisiko" style="margin-top:14px">Tamu tidak akan melihat <span data-d-sisa></span> foto ini</h2>
+          <p class="body muted" style="margin-top:10px">
+            Foto ini belum ada di folder Drive. Yang antre akan menyusul sendiri, tapi tamu yang memindai sekarang mengunduh isi folder
+            apa adanya saat ini, dan kebanyakan tamu cuma memindai sekali. Yang berstatus gagal tidak menyusul sama sekali sebelum diupload ulang.
+          </p>
+          <div class="card card-tight card-bad" style="margin-top:20px">
+            <div data-d-daftar></div>
+            <hr class="rule rule-bad" style="margin:14px 0">
+            <p class="small bad-text" style="margin:0">Semuanya masih tersimpan di laptop. Upload ulang bisa dilakukan kapan saja, juga dari Riwayat setelah sesi berakhir.</p>
+          </div>
+          <div class="dialog-actions">
+            <button class="btn btn-danger-ghost" style="flex:0 1 auto" type="button" data-akhiri>Tetap tampilkan QR</button>
+            <button class="btn btn-primary" style="flex:1 1 auto" type="button" data-batal>Kembali, coba upload lagi</button>
+          </div>
+        </div>
+      </dialog>
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

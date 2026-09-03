@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Riwayat — MCF Photobooth</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand"><span class="mark" aria-hidden="true"></span> MCF Photobooth <small>v1.1</small></div>
+    <nav class="nav" aria-label="Navigasi utama">
+      <a href="index.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.2 6.6h2.4l1.1-1.8h6.6l1.1 1.8h2.4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.9" stroke="currentColor" stroke-width="1.5"/></svg></span>Sesi</a>
+      <a href="riwayat.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7.4" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.8v4.5l3 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Riwayat<span class="nav-badge" data-badge-riwayat></span></a>
+      <a href="layar-tamu.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><rect x="2.6" y="3.4" width="14.8" height="10" rx="1.4" stroke="currentColor" stroke-width="1.5"/><path d="M7 16.6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 13.4v3.2" stroke="currentColor" stroke-width="1.6"/></svg></span>Layar tamu</a>
+      <a href="pengaturan.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M10 2.6v2m0 10.8v2M17.4 10h-2M4.6 10h-2m12.2-5.2-1.4 1.4M6.8 13.2l-1.4 1.4m0-9.8 1.4 1.4m6.4 6.4 1.4 1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>Pengaturan</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="health">
+        <span class="health-title">Kesehatan sistem</span>
+        <div class="health-row"><span class="dot dot-idle" data-health-drive-dot></span> Google Drive <span class="val" data-health-drive>memeriksa…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-internet-dot></span> Internet <span class="val" data-health-internet>…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-disk-dot></span> Disk lokal <span class="val" data-health-disk>…</span></div>
+        <div class="health-row"><span class="dot dot-idle" data-health-tamu-dot></span> Layar tamu <span class="val" data-health-tamu>…</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="appbar">
+      <div>
+        <h1 class="page-title">Riwayat</h1>
+        <p class="page-sub">Cari sesi lama, tampilkan ulang QR, kirim tautan, upload sisa foto.</p>
+      </div>
+      <div class="topbar-spacer"></div>
+      <span class="chip chip-bad" data-chip-server hidden><span class="dot dot-bad"></span> Terputus dari server</span>
+      <span class="chip chip-idle" data-chip-tamu><span class="dot dot-idle"></span> Layar tamu belum dibuka</span>
+    </header>
+
+    <main class="page">
+      <div class="wrap stack-24" data-riwayat>
+
+        <div data-pita-qr hidden>
+          <div class="banner banner-accent">
+            <div class="banner-body">
+              <div class="banner-title">Monitor tamu sedang menampilkan QR <span data-pita-qr-nama></span></div>
+              <div class="banner-text">Bertahan sampai sesi berikutnya dimulai, atau kembalikan ke layar sambutan sekarang.</div>
+              <div class="row" style="margin-top:14px"><button class="btn btn-sm" type="button" data-batal-qr data-butuh-server>Kembali ke sambutan</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-hero">
+          <label class="field-label" for="inputCari">Nama tamu atau kode sesi</label>
+          <div class="search-wrap">
+            <svg class="search-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.8"/><path d="M13.5 13.5 17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <input class="input input-search" id="inputCari" type="search" placeholder="mis. Budi, atau Budi_Ani_2026" autocomplete="off" data-cari>
+          </div>
+          <div class="row-between" style="margin-top:12px">
+            <span class="small subtle" data-ringkasan-riwayat>memuat…</span>
+            <span class="small subtle" data-ringkasan-hari></span>
+          </div>
+        </div>
+
+        <div class="card card-flush">
+          <div data-skel style="padding:20px 24px" class="stack-12">
+            <div class="skel" style="height:22px;width:40%">&nbsp;</div>
+            <div class="skel" style="height:16px;width:60%">&nbsp;</div>
+            <div class="skel" style="height:22px;width:35%">&nbsp;</div>
+          </div>
+          <div class="list" data-daftar></div>
+          <div class="empty" data-kosong hidden>
+            <div class="empty-title">Belum ada sesi sama sekali</div>
+            <div class="empty-text">Sesi pertama akan muncul di sini begitu kamu menekan Mulai Sesi.</div>
+            <div class="row" style="justify-content:center;margin-top:16px"><a class="btn btn-primary" href="index.html">Mulai sesi pertama</a></div>
+          </div>
+          <div class="empty" data-kosong-cari hidden>
+            <div class="empty-title">Tidak ada sesi bernama “<span data-kosong-q></span>”</div>
+            <div class="empty-text">Coba ejaan yang lebih pendek, atau sebagian kode sesinya saja.</div>
+          </div>
+          <div class="row" style="justify-content:center;padding:16px">
+            <button class="btn btn-sm btn-quiet" type="button" data-lagi hidden>Muat lebih banyak</button>
+          </div>
+        </div>
+
+        <p class="small subtle" style="margin:0">
+          “Tampilkan QR” mengambil alih monitor tamu tanpa mengupload apa pun — fotonya sudah di Drive sejak sesi berjalan.
+          “Upload sisanya” hanya mengirim foto yang gagal atau menggantung.
+        </p>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
