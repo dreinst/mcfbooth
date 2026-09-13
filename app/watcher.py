@@ -58,7 +58,7 @@ FOTO_EXT = {".jpg", ".jpeg", ".arw", ".png", ".tif", ".tiff", ".heic"}
 RETRY_DELAYS = [1, 5, 15]
 
 # Berkas dianggap selesai ditulis kalau ukurannya tidak berubah selama
-# interval ini. Imaging Edge menulis JPEG 24 MP dalam beberapa detik.
+# interval ini. Aplikasi tethering menulis JPEG 24 MP dalam beberapa detik.
 STABILITAS_DETIK = env_float("STABILITAS_DETIK", 1.5)
 STABIL_TIMEOUT = env_float("STABIL_TIMEOUT", 45)
 

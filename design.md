@@ -759,7 +759,7 @@ array `foto` yang memang sudah terurut kronologis dari server, tidak menuntut da
 |---|---|
 | Paket cetak (3 Pose Grid, 4 Pose Strip, Wide Landscape) dan hotkey `[1–3]` | PRD §5 secara eksplisit menaruh pencetakan sebagai kandidat v2, bukan v1 |
 | Printer "DNP RX1: Siap", tombol "Cetak Ulang" | Sama — tidak ada integrasi pencetakan di v1 |
-| Kamera Canon, ekstensi `.CR3` | Kontradiksi `.env` (`CAMERA_MODEL=Sony ZV-E10`) dan arsitektur §6 (Imaging Edge Desktop, ekosistem Sony) |
+| Kamera Canon, ekstensi `.CR3` | Kontradiksi `.env` (`CAMERA_MODEL=Sony ZV-E10`) dan arsitektur §6 (ekosistem Sony) |
 | Nomor sesi generik ("Sesi #090", `MCF-20241026-089`) menggantikan `session_code` | Merusak keterlacakan by name yang jadi tujuan FR14 — kode sesi asli tetap `NamaTamu_YYYYMMDD_HHMMSS` |
 | "VIP Booth #1", "Wedding Premium 10 Strips", label paket/tier | Tidak ada fitur paket atau tingkatan layanan di skema `sessions` atau PRD |
 | Klaim "Resolusi Penuh 4K Ultra-HD", unduh ZIP, "EXP: 48 JAM" di layar tamu | Google Drive mengirim berkas apa adanya (tidak ada resize), dan folder Drive tidak dibuat kedaluwarsa — mengaku begitu ke tamu adalah janji palsu |
