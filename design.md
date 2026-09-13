@@ -2,14 +2,14 @@
 
 Dokumen ini mengatur tampilan dan perilaku antarmuka. Yang mengatur *apa* yang dibangun
 ada di `prd-sistem-photobooth.md`; yang mengatur *bagaimana* sistemnya tersusun ada di
-`arsitektur-sistem-photobooth.md`. Kalau ketiganya berselisih, PRD menang soal lingkup,
-arsitektur menang soal data, dokumen ini menang soal tampilan.
+`architecture.md`. Kalau ketiganya berselisih, PRD menang soal lingkup, arsitektur
+menang soal data, dokumen ini menang soal tampilan.
 
 Tampilannya hidup di `web/` — empat halaman operator plus halaman layar tamu — dan
 disajikan server FastAPI di `http://127.0.0.1:8000/`. Rujukan `prototipe/…` di bagian
 §4–§5 menunjuk berkas lama yang sudah digantikan `web/` dengan nama yang sama
 (`index.html`, `riwayat.html`, `layar-tamu.html`, `pengaturan.html`, `tamu.html`);
-lihat §0 untuk yang berubah.
+lihat §0 dan §11 untuk yang berubah sejak itu.
 
 Rujukan berbentuk `photobooth_*/code.html:<baris>` dan `kinetic_operator/DESIGN.md:<baris>`
 menunjuk ke isi `design md.zip` — desain lama hasil Stitch, relatif terhadap folder
@@ -569,10 +569,10 @@ sama sekali.
 Tidak ada halaman yang menggulir horizontal di 390, 900, dan 1366 — diperiksa lewat
 tangkapan layar Chrome headless saat revisi v1.1, bukan skrip yang ikut di repo.
 
-Kontras minimum 4,5:1 untuk semua teks. Angka di §2.4 milik palet terang lama; palet
-gelap v1.1 di `web/ui.css` memakai teks gelap di atas latar merah/aksen justru supaya
-ambang ini terpenuhi. Tinggi tombol, tautan, dan input (tidak ada yang di bawah 44px) dan
-cincin fokus 3px diperiksa manual.
+Kontras minimum 4,5:1 untuk semua teks. Sejak v1.2, `web/ui.css` kembali memakai palet
+terang §2.4 apa adanya, jadi angka di sana berlaku langsung untuk `web/`, bukan hanya
+untuk prototipe lama; latar chip status dihitung ulang di §11.1. Tinggi tombol, tautan,
+dan input (tidak ada yang di bawah 44px) dan cincin fokus 3px diperiksa manual.
 
 Tombol yang dinonaktifkan memakai `aria-disabled`, bukan atribut `disabled`. Atribut
 `disabled` mengeluarkan tombol dari urutan tab, jadi pemakai papan ketik tidak akan
@@ -674,3 +674,105 @@ diuji di venue nyata.
 Alur "Upload sisanya" dari Riwayat belum punya layar sendiri — sekarang baru berupa
 tombol. Bentuk umpan baliknya saat proses berjalan perlu diputuskan sebelum
 diimplementasikan.
+
+---
+
+## 11. Revisi v1.2 — kurasi paket desain `stitch_playful_blue_orange_doodle`
+
+Pemilik proyek menaruh paket Stitch baru (`stitch_playful_blue_orange_doodle.zip`,
+sistem bernama "Vibrant Studio Kinetic" di `vibrant_studio_kinetic/DESIGN.md`) dan minta
+dikurasi lalu diterapkan. Beda dari paket lama yang dirujuk §0–§9: paket ini justru
+dibangun di atas token milik proyek ini sendiri — radius, skala spasi, tipografi, dan
+palet terangnya sama persis dengan yang didokumentasikan di §2.3–§2.5, ditambah pasangan
+warna baru (biru elektrik + oranye tangerine) dan aksen "semi-doodle" yang dibatasi.
+Karena itu kurasinya bukan menolak-atau-menerima satu paket asing, melainkan memeriksa
+mana penambahannya yang punya sumber data nyata dan mana yang mengarang fitur — persis
+metode §1 dan §9.
+
+Yang paling berpengaruh: dengan mengecek ulang, ternyata `web/ui.css` versi v1.1 (tema
+gelap) memakai palet violet/mint (`#8b7cff`, `#3ddc97`, dst.) yang **tidak pernah
+didokumentasikan rasio kontrasnya** — berbeda dari tabel di §2.4 yang justru mendokumen-
+tasikan palet terang. Versi v1.1 juga menambah shadow dekoratif (glow di tombol utama,
+titik status, mark merek, kartu QR) yang melanggar aturan v1 sendiri: "Kedalaman datang
+dari garis rambut... satu-satunya bayangan dipakai untuk dialog" (§2.5). Paket baru
+menegaskan aturan yang sama persis ("satu-satunya box-shadow di seluruh sistem dipakai
+untuk dialog sistem") — jadi mengembalikan ke terang sekaligus membuang shadow dekoratif
+itu bukan cuma ikut selera paket baru, tapi menutup penyimpangan dokumentasi yang sudah
+ada.
+
+### 11.1 Diterima
+
+**Kembali ke palet terang §2.4, dengan token warna oranye baru yang dibatasi ketat.**
+Nilai `--bg` `#f4f5f7`, `--surface` `#ffffff`, `--ink`/`--ink-2`/`--ink-3`, `--accent`
+`#1b4fd8`, `--ok`/`--wait`/`--bad` kembali persis ke §2.4 — rasio kontrasnya sudah pernah
+diukur di sana. Latar chip status (`--ok-soft`, `--wait-soft`, `--bad-soft`) dihitung
+ulang untuk revisi ini karena versi lama tidak pernah menyebut nilai persisnya: hijau di
+atas latarnya 4,55:1, kuning 4,52:1, merah 5,04:1 — semua ≥ 4,5:1 seperti disyaratkan
+§7. Dua token baru, `--secondary` (`#f97316`, oranye tangerine) dan `--secondary-strong`
+(`#c2570a`), **bukan warna status kelima**. Kontrasnya terhadap putih cuma 2,8:1, jadi ia
+tidak pernah dipakai untuk teks kecil atau makna yang harus terbaca dari jauh — hanya
+untuk elemen grafis/dekoratif di dua tempat bermakna sama, tidak lebih:
+
+- **Mulai sesi**, lewat `--sunset-gradient` (biru → oranye) di tombol Mulai Sesi
+  (`.btn-hero`). Paket sumbernya sendiri membatasi gradasi ini untuk "kiosk capture
+  triggers... dan banner 'Sesi Dimulai'" — dari ketiganya, cuma momen mulai sesi yang
+  ada di sistem ini (tidak ada tombol jepret software, tidak ada pencetakan).
+- **Sesi selesai**, lewat satu ikon bintang kecil (`.sparkle-selesai`) di chip "Sesi
+  selesai" pada layar operator, dan warna kicker + garis bawah bergelombang oranye di
+  layar tamu **hanya saat keadaan `qr`** (bukan saat `memotret` atau `sambutan`).
+
+Di luar dua titik itu oranye dilarang muncul — sama seperti aturan "warna mentah dilarang
+di markup" di §2.4, sekarang dengan satu pengecualian bermakna tunggal, bukan bebas
+pakai.
+
+**Garis bawah bergelombang (squiggle), dua instans saja.** Satu di judul "Siapa yang
+difoto?" pada layar idle (biru, menandai awal), satu di nama tamu pada layar tamu keadaan
+`qr` (oranye, menandai selesai). Diterapkan lewat selector terstruktur
+(`[data-tahap="idle"] .card-hero .h1`, `[data-variant="qr"] .guest-name`), bukan kelas
+bebas pakai yang bisa menyebar ke elemen lain — paket sumber sendiri mensyaratkan
+"punctuate focal points... without polluting operational dashboards", dan sistem ini
+menegakkannya lebih ketat dari yang diminta paket sumbernya sendiri (VARIANCE 3, §2.2,
+tidak berubah).
+
+**Filter Semua/Lengkap/Perlu tindakan di Riwayat.** Idenya nyata (paket sumber
+menampilkan `Semua 28 / Lengkap 26 / Perlu Tindakan 2`), tapi implementasinya dikurangi
+jujur: tidak ada endpoint pencarian status baru di backend, jadi filter ini hanya menata
+ulang baris yang **sudah dimuat** di halaman saat ini, dengan keterangan eksplisit
+"Saringan ini hanya berlaku pada baris yang sudah dimuat" begitu filter selain Semua
+dipakai — konsisten dengan §6 "kosong tidak sama dengan gagal": jangan berpura-pura
+lengkap kalau sebenarnya cuma sebagian.
+
+**Tombol "Buka folder Drive" per baris Riwayat.** Pakai `drive_folder_link` yang memang
+sudah tersimpan di setiap sesi — tidak perlu endpoint baru, cuma tautan `target="_blank"`
+di samping "Salin tautan" yang sudah ada.
+
+**Tombol "Uji ulang" di Pengaturan.** Memaksa `GET /api/drive/status?paksa=true` dan
+memuat ulang pemeriksaan awal — endpoint parameter `paksa` memang sudah ada di
+`server.py`, cuma belum ada pemicunya di UI.
+
+**Penomoran urutan pada petak foto** (`#01`, `#02`, …) di grid operator. Murni indeks
+array `foto` yang memang sudah terurut kronologis dari server, tidak menuntut data baru.
+
+### 11.2 Ditolak
+
+| Diusulkan paket | Ditolak karena |
+|---|---|
+| Paket cetak (3 Pose Grid, 4 Pose Strip, Wide Landscape) dan hotkey `[1–3]` | PRD §5 secara eksplisit menaruh pencetakan sebagai kandidat v2, bukan v1 |
+| Printer "DNP RX1: Siap", tombol "Cetak Ulang" | Sama — tidak ada integrasi pencetakan di v1 |
+| Kamera Canon, ekstensi `.CR3` | Kontradiksi `.env` (`CAMERA_MODEL=Sony ZV-E10`) dan arsitektur §6 (Imaging Edge Desktop, ekosistem Sony) |
+| Nomor sesi generik ("Sesi #090", `MCF-20241026-089`) menggantikan `session_code` | Merusak keterlacakan by name yang jadi tujuan FR14 — kode sesi asli tetap `NamaTamu_YYYYMMDD_HHMMSS` |
+| "VIP Booth #1", "Wedding Premium 10 Strips", label paket/tier | Tidak ada fitur paket atau tingkatan layanan di skema `sessions` atau PRD |
+| Klaim "Resolusi Penuh 4K Ultra-HD", unduh ZIP, "EXP: 48 JAM" di layar tamu | Google Drive mengirim berkas apa adanya (tidak ada resize), dan folder Drive tidak dibuat kedaluwarsa — mengaku begitu ke tamu adalah janji palsu |
+| "Kirim Sinyal Refresh SSE", saklar manual Sambutan/Memotret/QR di halaman Layar tamu | Bertentangan dengan prinsip "aplikasi tidak pernah memutuskan sendiri" (README) — mesin keadaan `GET /api/tampilan-tamu` sudah otomatis dan benar; memaksa keadaan lain saat ada sesi aktif akan membohongi tamu tentang statusnya sendiri |
+| Label berbahasa Inggris ("LIVE SESSION FINISHED", "Scan Me!", "READY", "PENDING") | §6 "Bahasa Indonesia seluruhnya" |
+| "60 FPS Hardware Sync", "MCF Chromium Kiosk v1.1", latensi buatan lainnya | Sama alasan §9 lama membuang Hardware Status: tidak ada komponen di arsitektur yang bisa menghasilkan angka itu |
+| Sparkle/squiggle di banyak kartu sekaligus (preflight, riwayat, pengaturan) | Melanggar VARIANCE 3 (§2.2) — dibatasi ke dua momen bermakna tunggal, lihat §11.1 |
+
+### 11.3 Yang belum diverifikasi dari revisi ini
+
+Kurasi ini dikerjakan dari kode, bukan dari layar sungguhan yang dilihat manusia:
+tangkapan layar Chrome headless di tiga lebar (§7) belum diulang untuk palet terang yang
+baru. Cek kontras di §11.1 dihitung ulang dengan rumus WCAG relative luminance, bukan
+diukur dari browser — sebelum acara pertama sebaiknya diperiksa sekali lagi dengan alat
+kontras browser, terutama chip status di atas foto (`.photo .state`) yang sekarang solid
+(bukan transparan) supaya tetap terbaca di atas foto apa pun.

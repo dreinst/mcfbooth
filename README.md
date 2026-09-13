@@ -41,7 +41,7 @@ tekan Login Google. Setelah itu baris Google Drive di pemeriksaan awal hijau.
 | Berkas | Isi | Baca kalau |
 |---|---|---|
 | `prd-sistem-photobooth.md` | Lingkup, user story, requirement, risiko | mau tahu apa yang dibangun dan apa yang sengaja tidak |
-| `arsitektur-sistem-photobooth.md` | Komponen, skema database, alur data, tech stack | mau tahu bagaimana sistemnya tersusun |
+| `architecture.md` | Komponen, skema database, alur data, tech stack | mau tahu bagaimana sistemnya tersusun |
 | `design.md` | Prinsip tampilan, tiap layar, keadaan galat, tuntutan ke arsitektur | mau mengubah tampilan atau menilai keputusannya |
 | `app/` | Server FastAPI, SQLite, klien Drive, watcher, QR, SSE | mau memakai atau melanjutkan backend-nya |
 | `web/` | Tampilan operator (4 halaman) dan layar tamu, disajikan server di `/` | mau mengubah tampilan |
@@ -334,9 +334,10 @@ Aplikasi tidak pernah memutuskan sendiri kapan sesi selesai.
 
 Uji dengan akun Drive dan kamera sungguhan — lihat Status di atas.
 
-Tema terang dihapus di v1.1; seluruh tampilan gelap supaya layar besar di ballroom remang
-tidak menyilaukan. Kalau ada venue terang yang butuh sebaliknya, tokennya ada di
-`web/ui.css` dan cukup satu blok `:root` alternatif.
+Tema kembali terang di v1.2 (lihat `design.md` §11) — kanvas diturunkan ke `#f4f5f7`,
+bukan putih murni, supaya layar besar di ballroom remang tidak menyilaukan. Tangkapan
+layar Chrome headless untuk palet ini belum diulang di venue nyata; itu risiko yang
+sama seperti versi gelap sebelumnya, hanya berpindah arah.
 
 Foto di `local_archive/_tanpa_sesi/` belum bisa dipindahkan ke sesi lewat aplikasi.
 
@@ -355,5 +356,15 @@ putus, refresh token dan panggilan Drive punya batas waktu, login OAuth punya ba
 QR dibuat ulang kalau PNG-nya hilang, POST lintas situs ditolak. Baru: tampilan `web/`
 (gelap, font lokal), Riwayat dan Pengaturan nyata, pemeriksaan awal nyata, layar tamu
 digerakkan server, tiga suite uji termasuk Drive tiruan, `.env.example`.
+
+**v1.2** — Kurasi ulang tampilan dari paket Stitch baru (`design.md` §11): kembali ke
+palet terang yang sudah didokumentasikan §2.4 (kontras dihitung ulang untuk latar chip
+status), aksen oranye dibatasi ke dua momen bermakna tunggal (mulai sesi, sesi selesai),
+shadow dekoratif di luar dialog/toast dibuang. Baru: filter Semua/Lengkap/Perlu tindakan
+di Riwayat (hanya berlaku pada baris yang sudah dimuat), tombol Buka folder Drive per
+sesi, tombol Uji ulang koneksi di Pengaturan, penomoran urutan foto di grid operator.
+Ditolak dari paket sumber dan dicatat alasannya di `design.md` §11.2: paket cetak dan
+printer, kamera Canon/RAW `.CR3`, nomor sesi generik, label paket/tier tamu, klaim ZIP/4K/
+kedaluwarsa di layar tamu, saklar manual keadaan layar tamu, dan label berbahasa Inggris.
 
 **v1.0.0** — Drive, watcher, QR, SSE, integrasi awal frontend.

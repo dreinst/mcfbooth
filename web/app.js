@@ -434,9 +434,11 @@
     }
 
     function kelasFoto(s) { return 'photo' + (s === 'failed' ? ' is-bad' : s === 'pending' ? ' is-wait' : ''); }
-    function isiPetak(node, f) {
+    function isiPetak(node, f, urutan) {
       node.className = kelasFoto(f.status);
-      node.innerHTML = '<span class="fill"></span><span class="tag"></span>' +
+      node.innerHTML = '<span class="fill"></span>' +
+        (urutan ? '<span class="seq mono-plain">#' + String(urutan).padStart(2, '0') + '</span>' : '') +
+        '<span class="tag"></span>' +
         (f.status === 'uploaded' ? '<span class="state s-ok">Di Drive</span>' : f.status === 'pending' ? '<span class="state s-wait">Antre</span>' : '') +
         (f.status === 'failed' ? '<button class="retry" type="button" data-retry>' + ICON.retry + '<span class="retry-long">Gagal — coba lagi</span><span class="retry-short">Coba lagi</span></button>' : '');
       node.querySelector('.tag').textContent = f.nama;
@@ -445,16 +447,16 @@
     }
     function gambarGrid() {
       if (e.gridKosong) e.gridKosong.hidden = foto.length > 0;
-      foto.forEach(function (f) {
+      foto.forEach(function (f, idx) {
         var p = petak[f.id];
         if (!p) {
-          var d = document.createElement('div'); isiPetak(d, f);
-          e.grid.insertBefore(d, e.grid.firstChild); petak[f.id] = { el: d, status: f.status };
+          var d = document.createElement('div'); isiPetak(d, f, idx + 1);
+          e.grid.insertBefore(d, e.grid.firstChild); petak[f.id] = { el: d, status: f.status, urutan: idx + 1 };
           return;
         }
         if (p.status === f.status) return;
         var punyaFokus = p.el.contains(document.activeElement);
-        isiPetak(p.el, f); p.status = f.status;
+        isiPetak(p.el, f, p.urutan); p.status = f.status;
         if (punyaFokus) { var t = p.el.querySelector('.retry'); if (t) t.focus(); else { p.el.tabIndex = -1; p.el.focus(); } }
       });
     }
@@ -641,8 +643,38 @@
   (function halamanRiwayat() {
     var root = $('[data-riwayat]');
     if (!root) return;
-    var e = { cari: $('[data-cari]'), daftar: $('[data-daftar]'), kosong: $('[data-kosong]'), kosongCari: $('[data-kosong-cari]'), kosongQ: $('[data-kosong-q]'), ringkas: $('[data-ringkasan-riwayat]'), lagi: $('[data-lagi]'), skel: $('[data-skel]'), pitaQr: $('[data-pita-qr]'), pitaQrNama: $('[data-pita-qr-nama]') };
-    var q = '', offset = 0, total = 0, LIMIT = 20;
+    var e = { cari: $('[data-cari]'), daftar: $('[data-daftar]'), kosong: $('[data-kosong]'), kosongCari: $('[data-kosong-cari]'), kosongQ: $('[data-kosong-q]'), ringkas: $('[data-ringkasan-riwayat]'), lagi: $('[data-lagi]'), skel: $('[data-skel]'), pitaQr: $('[data-pita-qr]'), pitaQrNama: $('[data-pita-qr-nama]'), filterCatatan: $('[data-filter-catatan]') };
+    var q = '', offset = 0, total = 0, LIMIT = 20, filter = 'semua', dimuat = [];
+
+    /* Chip filter Semua/Lengkap/Perlu tindakan (design.md §0 v1.2): saringan
+       ini hanya menata ulang tampilan baris yang SUDAH dimuat di halaman ini —
+       tidak ada endpoint pencarian baru, jadi ia jujur menyebut batasannya
+       sendiri lewat data-filter-catatan alih-alih berpura-pura lengkap. */
+    var chipFilter = $$('[data-filter]', root);
+    function cocokFilter(s) {
+      if (filter === 'semua') return true;
+      var sisa = s.foto.pending + s.foto.failed;
+      if (filter === 'masalah') return sisa > 0;
+      return sisa === 0; // 'lengkap' — termasuk sesi tanpa foto sama sekali
+    }
+    function terapkanFilter() {
+      var tampil = 0;
+      $$('.list-row', e.daftar).forEach(function (row, i) {
+        var cocok = cocokFilter(dimuat[i]);
+        row.hidden = !cocok; if (cocok) tampil++;
+      });
+      chipFilter.forEach(function (c) { c.setAttribute('aria-pressed', String(c.dataset.filter === filter)); });
+      if (e.filterCatatan) e.filterCatatan.hidden = filter === 'semua';
+      var lengkap = dimuat.filter(function (s) { return s.foto.pending + s.foto.failed === 0; }).length;
+      var masalah = dimuat.length - lengkap;
+      $$('[data-filter-n="semua"]').forEach(function (n) { n.textContent = String(dimuat.length); });
+      $$('[data-filter-n="lengkap"]').forEach(function (n) { n.textContent = String(lengkap); });
+      $$('[data-filter-n="masalah"]').forEach(function (n) { n.textContent = String(masalah); });
+      return tampil;
+    }
+    chipFilter.forEach(function (c) {
+      c.addEventListener('click', function () { filter = c.dataset.filter; terapkanFilter(); });
+    });
 
     function chipStatus(s) {
       var f = s.foto;
@@ -673,6 +705,9 @@
       var salin = el('button', { class: 'btn btn-sm btn-quiet', type: 'button', text: 'Salin tautan' });
       ikatSalin(salin, function () { return s.drive_folder_link; });
       acts.appendChild(salin);
+      if (s.drive_folder_link) {
+        acts.appendChild(el('a', { class: 'btn btn-sm btn-quiet', href: s.drive_folder_link, target: '_blank', rel: 'noopener', text: 'Buka folder Drive' }));
+      }
       var qr = el('button', { class: 'btn btn-sm btn-primary', type: 'button', text: 'Tampilkan QR', 'data-butuh-server': '' });
       var alasanQr = !s.drive_folder_link ? 'Belum ada folder Drive, jadi belum ada QR' : (s.status === 'active' ? 'Sesi ini sedang berjalan — QR tampil setelah Selesai' : '');
       if (alasanQr) { qr.setAttribute('aria-disabled', 'true'); acts.appendChild(el('p', { class: 'btn-reason is-quiet', style: 'flex-basis:100%;margin:0', text: alasanQr })); }
@@ -685,17 +720,18 @@
       return row;
     }
     function muat(reset) {
-      if (reset) { offset = 0; e.daftar.textContent = ''; }
+      if (reset) { offset = 0; e.daftar.textContent = ''; dimuat = []; }
       e.skel.hidden = false; e.lagi.hidden = true;
       api('/api/sessions?q=' + encodeURIComponent(q) + '&limit=' + LIMIT + '&offset=' + offset).then(function (r) {
         total = r.total;
-        if (reset) e.daftar.textContent = '';
-        r.sesi.forEach(function (s) { e.daftar.appendChild(baris(s)); });
+        if (reset) { e.daftar.textContent = ''; dimuat = []; }
+        r.sesi.forEach(function (s) { e.daftar.appendChild(baris(s)); dimuat.push(s); });
         offset += r.sesi.length;
         e.kosong.hidden = !(total === 0 && !q); e.kosongCari.hidden = !(total === 0 && q);
         if (e.kosongQ) e.kosongQ.textContent = q;
         e.lagi.hidden = offset >= total;
         e.ringkas.textContent = q ? total + ' sesi cocok' : total + ' sesi tercatat';
+        terapkanFilter();
       }).catch(function (err) { toast('Riwayat tidak bisa dimuat: ' + err.message, 'bad'); }).then(function () { e.skel.hidden = true; });
     }
     e.cari.addEventListener('input', debounce(function () { q = e.cari.value.trim(); muat(true); }, 300));
@@ -742,7 +778,7 @@
     var root = $('[data-pengaturan]');
     if (!root) return;
     function isi(kunci, nilai) { $$('[data-p="' + kunci + '"]', root).forEach(function (n) { n.textContent = nilai == null || nilai === '' ? '—' : String(nilai); }); }
-    var btnLogin = $('[data-drive-login]'), btnLogout = $('[data-drive-logout]'), chip = $('[data-drive-chip]'), pesan = $('[data-drive-pesan]'), meter = $('[data-kuota-meter]');
+    var btnLogin = $('[data-drive-login]'), btnLogout = $('[data-drive-logout]'), chip = $('[data-drive-chip]'), pesan = $('[data-drive-pesan]'), meter = $('[data-kuota-meter]'), btnUji = $('[data-uji-ulang]');
 
     function gambarDrive(p) {
       var d = p.drive || {};
@@ -796,6 +832,15 @@
       api('/api/drive/logout', { method: 'POST' }).then(function (r) { toast(r.pesan, 'ok'); window.MCF.muatPreflight(); }).catch(function (err) { toast(err.message, 'bad'); });
     });
     aliran.on('drive_status', function () { window.MCF.muatPreflight(); });
+
+    if (btnUji) btnUji.addEventListener('click', function () {
+      if (nonaktif(btnUji)) return;
+      var semula = btnUji.textContent; btnUji.textContent = 'Menguji…';
+      Promise.all([api('/api/drive/status?paksa=true'), window.MCF.muatPreflight()])
+        .then(function () { toast('Pemeriksaan selesai.', 'ok'); })
+        .catch(function (err) { toast(err.message, 'bad'); })
+        .then(function () { btnUji.textContent = semula; });
+    });
   })();
 
   /* ============================================================= layar tamu */

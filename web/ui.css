@@ -1,7 +1,11 @@
 /* ==========================================================================
-   MCF Photobooth — sistem desain v1.1 (tema gelap)
+   MCF Photobooth — sistem desain v1.2 (tema terang + aksen oranye terbatas)
    Tidak ada permintaan jaringan di berkas ini. Font di-bundle di web/fonts/.
-   Semua warna lewat token: satu warna, satu arti (design.md §2.4).
+   Semua warna lewat token: satu warna, satu arti (design.md §2.4, §0 v1.2).
+   Oranye (--secondary) BUKAN warna status baru — ia hanya dipakai di dua
+   tempat bermakna sama: mulai sesi (tombol) dan sesi selesai (chip + kicker
+   tamu). Di luar situ, dilarang muncul di markup — sama seperti biru/hijau/
+   kuning/merah yang sudah lebih dulu diikat maknanya masing-masing.
    ========================================================================== */
 
 @font-face {
@@ -20,38 +24,49 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Kanvas & permukaan — gelap tapi bukan hitam, supaya foto tetap "mengapung" */
-  --bg:            #0a0c11;
-  --bg-glow:       radial-gradient(1200px 600px at 8% -10%, rgba(124, 108, 255, .22), transparent 60%),
-                   radial-gradient(900px 500px at 100% 0%, rgba(61, 220, 151, .08), transparent 55%);
-  --surface:       #12151d;
-  --surface-2:     #181c26;
-  --surface-3:     #1f2430;
-  --line:          rgba(255, 255, 255, .08);
-  --line-strong:   rgba(255, 255, 255, .16);
+  /* Kanvas & permukaan — diturunkan dari putih murni supaya layar besar di
+     ballroom remang tidak menyilaukan (design.md §1), bidang putih dibatasi
+     ke kartu. */
+  --bg:            #f4f5f7;
+  --bg-glow:       radial-gradient(1100px 560px at 6% -12%, rgba(27, 79, 216, .05), transparent 60%),
+                   radial-gradient(900px 480px at 100% 0%, rgba(249, 115, 22, .04), transparent 55%);
+  --surface:       #ffffff;
+  --surface-2:     #fafbfc;
+  --surface-3:     #eef0f4;
+  --line:          #e2e5ea;
+  --line-strong:   #cbd0d8;
 
-  --ink:           #f2f4f8;
-  --ink-2:         #aab2c1;
-  --ink-3:         #7d8698;
-  --ink-inverse:   #0a0c11;
+  --ink:           #12161f;
+  --ink-2:         #5a6270;
+  --ink-3:         #616875;
+  --ink-inverse:   #ffffff;
 
-  /* Aksen — hanya aksi utama dan keadaan aktif */
-  --accent:        #8b7cff;
-  --accent-strong: #a597ff;
-  --accent-soft:   rgba(139, 124, 255, .14);
-  --accent-glow:   0 0 0 1px rgba(139, 124, 255, .45), 0 10px 40px -8px rgba(139, 124, 255, .55);
-  --on-accent:     #0a0c11;
+  /* Aksen — hanya aksi utama dan keadaan aktif. Satu warna, satu arti. */
+  --accent:        #1b4fd8;
+  --accent-strong: #143da8;
+  --accent-soft:   #eaf0ff;
+  --on-accent:     #ffffff;
 
-  /* Status — satu warna satu arti */
-  --ok:            #3ddc97;
-  --ok-soft:       rgba(61, 220, 151, .14);
-  --wait:          #ffb95a;
-  --wait-soft:     rgba(255, 185, 90, .14);
-  --bad:           #ff5d5d;
-  --bad-strong:    #ff8080;
-  --bad-soft:      rgba(255, 93, 93, .14);
+  /* Oranye — bukan status, bukan aksi umum. Dua makna terikat, tidak lebih:
+     mulai sesi (lewat --sunset-gradient di tombol Mulai Sesi) dan sesi
+     selesai (chip operator + kicker tamu). Kontras teks-di-atas-oranye tidak
+     diverifikasi karena oranye tidak pernah menjadi latar teks kecil —
+     hanya elemen dekoratif/grafis (garis, ikon, gradasi tombol besar). */
+  --secondary:        #f97316;
+  --secondary-strong: #c2570a;
+  --sunset-gradient:  linear-gradient(135deg, var(--accent) 0%, #2f6fe0 45%, var(--secondary) 100%);
+
+  /* Status — satu warna satu arti. Latar "soft" diverifikasi ≥4,5:1 dengan
+     teksnya (dihitung ulang untuk revisi ini, lihat design.md §0 v1.2). */
+  --ok:            #0f7a4a;
+  --ok-soft:       rgba(15, 122, 74, .12);
+  --wait:          #9a6400;
+  --wait-soft:     rgba(154, 100, 0, .08);
+  --bad:           #c02626;
+  --bad-strong:    #931d1d;
+  --bad-soft:      rgba(192, 38, 38, .10);
 
   /* Bentuk */
   --r-sm: 6px;
@@ -60,7 +75,9 @@
   --r-xl: 20px;
   --r-pill: 999px;
 
-  --shadow-overlay: 0 32px 64px -16px rgba(0, 0, 0, .7), 0 2px 8px rgba(0, 0, 0, .4);
+  /* Satu-satunya bayangan yang diizinkan di luar dialog/toast: elemen
+     mengambang sesaat (overlay), bukan kartu diam. design.md §2.5 & §0 v1.2. */
+  --shadow-overlay: 0 20px 40px -15px rgba(18, 22, 31, .16), 0 2px 8px rgba(18, 22, 31, .06);
 
   --ease: cubic-bezier(.22, 1, .36, 1);
   --t-fast: 140ms;
@@ -115,13 +132,34 @@ button, input { font: inherit; color: inherit; }
 .bad-text { color: var(--bad-strong); }
 .accent-text { color: var(--accent-strong); }
 
+/* Garis bawah bergelombang tipis (2px, warna tunggal) — hanya dua tempat
+   berlisensi lewat selector di bawah, tidak pernah lewat kelas bebas pakai.
+   design.md §0 v1.2 "semi-doodle terbatas". */
+.h1-squiggle { position: relative; display: inline-block; }
+.h1-squiggle::after {
+  content: ""; position: absolute; left: 2px; right: 6%; bottom: -.12em; height: 10px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 6.5c3-4 6-6 10-2s7 6 10 2 6-6 10-2 7 6 10 2' fill='none' stroke='%231b4fd8' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: repeat-x; background-size: 40px 10px; opacity: .55;
+}
+[data-tahap="idle"] .card-hero .h1 { position: relative; z-index: 1; }
+
+/* Ikon bintang kecil (sparkle) — hanya pada momen "sesi selesai", sisi
+   operator dan sisi tamu, tidak di tempat lain. */
+.sparkle-selesai { position: relative; }
+.sparkle-selesai::after {
+  content: ""; position: absolute; width: 16px; height: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1l1.8 5.9L18 9l-6.2 2.1L10 17l-1.8-5.9L2 9l6.2-2.1L10 1z' fill='%23f97316'/%3E%3C/svg%3E");
+  background-size: contain; background-repeat: no-repeat;
+}
+[data-tahap="selesai"] .card-hero > .chip-ok.sparkle-selesai::after { right: -22px; top: -8px; }
+
 /* ------------------------------------------------------------------ layout */
 
 .app { display: grid; grid-template-columns: 264px minmax(0, 1fr); min-height: 100%; }
 .app > * { min-width: 0; }
 
 .sidebar {
-  background: rgba(18, 21, 29, .85);
+  background: rgba(255, 255, 255, .85);
   backdrop-filter: blur(12px);
   border-right: 1px solid var(--line);
   display: flex; flex-direction: column;
@@ -134,13 +172,10 @@ button, input { font: inherit; color: inherit; }
 }
 .brand .mark {
   width: 28px; height: 28px; border-radius: 8px; flex: 0 0 28px;
-  background: linear-gradient(135deg, var(--accent), #5ee7c8);
-  box-shadow: 0 0 24px rgba(139, 124, 255, .45);
-  position: relative;
-}
-.brand .mark::after {
-  content: ""; position: absolute; inset: 8px; border-radius: 50%;
-  background: var(--bg); box-shadow: inset 0 0 0 3px rgba(255,255,255,.9);
+  background-image: url("logo-mark.svg"), linear-gradient(135deg, var(--accent), var(--secondary));
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, center;
+  background-size: 60%, cover;
 }
 .brand small { font-weight: 500; color: var(--ink-3); font-size: 12px; margin-left: auto; }
 
@@ -164,7 +199,7 @@ button, input { font: inherit; color: inherit; }
 .sidebar-foot { margin-top: auto; }
 .health {
   border: 1px solid var(--line); border-radius: var(--r-lg);
-  background: var(--surface); padding: 14px 14px 10px;
+  background: var(--surface-2); padding: 14px 14px 10px;
 }
 .health-title { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px; }
 .health-row { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
@@ -177,7 +212,7 @@ button, input { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 20px 32px; border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 5;
-  background: rgba(10, 12, 17, .7); backdrop-filter: blur(12px);
+  background: rgba(244, 245, 247, .82); backdrop-filter: blur(12px);
 }
 .appbar .page-title { font-size: 20px; font-weight: 800; letter-spacing: -.01em; margin: 0; }
 .appbar .page-sub { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
@@ -205,11 +240,11 @@ button, input { font: inherit; color: inherit; }
 .card-tight { padding: 20px; }
 .card-flush { padding: 0; overflow: hidden; }
 .card-sunken { background: var(--surface-2); }
-.card-bad { background: var(--bad-soft); border-color: rgba(255, 93, 93, .35); }
-hr.rule-bad { border-top-color: rgba(255, 93, 93, .3); }
+.card-bad { background: var(--bad-soft); border-color: rgba(192,38,38,.3); }
+hr.rule-bad { border-top-color: rgba(192,38,38,.25); }
 .card-hero {
-  background: linear-gradient(160deg, rgba(139,124,255,.16), rgba(18,21,29,.0) 55%), var(--surface);
-  border-color: rgba(139,124,255,.25);
+  background: linear-gradient(160deg, rgba(27,79,216,.05), rgba(255,255,255,0) 55%), var(--surface);
+  border-color: var(--line);
 }
 .section-label {
   display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em;
@@ -230,19 +265,23 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .btn:active { transform: translateY(1px); }
 .btn-primary {
   background: var(--accent); color: var(--on-accent); border-color: transparent;
-  box-shadow: var(--accent-glow);
 }
 .btn-primary:hover { background: var(--accent-strong); }
-.btn-danger-ghost { background: transparent; color: var(--bad-strong); border-color: rgba(255,93,93,.45); }
+/* Satu-satunya tombol bergradasi biru→oranye di seluruh sistem: Mulai Sesi,
+   simbol awal sesi (design.md §0 v1.2, dipasangkan dengan sparkle "selesai"). */
+.btn-hero { background: var(--sunset-gradient); color: #fff; border-color: transparent; }
+.btn-hero:hover { filter: brightness(1.06); }
+.btn-danger-ghost { background: transparent; color: var(--bad-strong); border-color: rgba(192,38,38,.4); }
 .btn-danger-ghost:hover { background: var(--bad-soft); }
 .btn-quiet { background: transparent; border-color: transparent; color: var(--ink-2); }
 .btn-quiet:hover { background: var(--surface-2); color: var(--ink); }
 .btn-lg { min-height: 64px; padding: 0 28px; font-size: 18px; border-radius: var(--r-lg); }
 .btn-sm { min-height: 44px; padding: 0 14px; font-size: 14px; }
 .btn-block { width: 100%; }
-.btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
 .btn[aria-disabled="true"]:hover { background: var(--surface-2); }
 .btn-primary[aria-disabled="true"]:hover { background: var(--accent); }
+.btn-hero[aria-disabled="true"] { filter: grayscale(.5); }
 .btn-reason { margin: 10px 0 0; font-size: 14px; color: var(--bad-strong); }
 .btn-reason.is-quiet { color: var(--ink-3); }
 .btn-reason.is-wait { color: var(--wait); }
@@ -272,18 +311,27 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
   background: var(--surface-3); color: var(--ink-2); border: 1px solid var(--line);
   white-space: nowrap;
 }
-.chip-ok { background: var(--ok-soft); color: var(--ok); border-color: rgba(61,220,151,.3); }
-.chip-wait { background: var(--wait-soft); color: var(--wait); border-color: rgba(255,185,90,.3); }
-.chip-bad { background: var(--bad-soft); color: var(--bad-strong); border-color: rgba(255,93,93,.35); }
+.chip-ok { background: var(--ok-soft); color: var(--ok); border-color: rgba(15,122,74,.25); }
+.chip-wait { background: var(--wait-soft); color: var(--wait); border-color: rgba(154,100,0,.25); }
+.chip-bad { background: var(--bad-soft); color: var(--bad-strong); border-color: rgba(192,38,38,.3); }
 .chip-idle { }
-.chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: rgba(139,124,255,.35); }
+.chip-accent { background: var(--accent-soft); color: var(--accent-strong); border-color: rgba(27,79,216,.25); }
+/* Chip filter (Riwayat) — pill dipakai sebagai tab, bukan status. */
+.chip-filter {
+  cursor: pointer; user-select: none; font-family: var(--font-mono); text-transform: none;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2);
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.chip-filter:hover { background: var(--surface-2); }
+.chip-filter[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.chip-filter .n { font-weight: 700; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; background: var(--ink-3); }
-.dot-ok { background: var(--ok); box-shadow: 0 0 10px rgba(61,220,151,.7); }
+.dot-ok { background: var(--ok); }
 .dot-wait { background: var(--wait); }
 .dot-bad { background: var(--bad); }
 .dot-idle { background: var(--ink-3); }
 .dot-accent { background: var(--accent); }
-.dot-live { background: var(--ok); box-shadow: 0 0 10px rgba(61,220,151,.7); animation: denyut 1.6s ease-in-out infinite; }
+.dot-live { background: var(--ok); animation: denyut 1.6s ease-in-out infinite; }
 @keyframes denyut { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* --------------------------------------------------------- daftar periksa */
@@ -317,7 +365,7 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .counter-wait .counter-n { color: var(--wait); }
 .counter-terakhir.is-idle .counter-n { color: var(--ink-3); }
 .counter-terakhir.is-ok .counter-n { color: var(--ink); }
-.counter-terakhir.is-wait { border-color: rgba(255,185,90,.5); }
+.counter-terakhir.is-wait { border-color: rgba(154,100,0,.4); }
 .counter-terakhir.is-wait .counter-n { color: var(--wait); }
 .counter-terakhir.is-bad { border-color: var(--bad); background: var(--bad-soft); }
 .counter-terakhir.is-bad .counter-n { color: var(--bad-strong); }
@@ -336,10 +384,10 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 /* ------------------------------------------------------------------ banner */
 
 .banner { display: flex; gap: 14px; padding: 18px 20px; border-radius: var(--r-lg); border: 1px solid; }
-.banner-bad { background: var(--bad-soft); border-color: rgba(255,93,93,.4); color: var(--bad-strong); }
-.banner-wait { background: var(--wait-soft); border-color: rgba(255,185,90,.4); color: var(--wait); }
-.banner-accent { background: var(--accent-soft); border-color: rgba(139,124,255,.4); color: var(--accent-strong); }
-.banner-ok { background: var(--ok-soft); border-color: rgba(61,220,151,.35); color: var(--ok); }
+.banner-bad { background: var(--bad-soft); border-color: rgba(192,38,38,.3); color: var(--bad-strong); }
+.banner-wait { background: var(--wait-soft); border-color: rgba(154,100,0,.3); color: var(--wait); }
+.banner-accent { background: var(--accent-soft); border-color: rgba(27,79,216,.3); color: var(--accent-strong); }
+.banner-ok { background: var(--ok-soft); border-color: rgba(15,122,74,.25); color: var(--ok); }
 .banner .banner-body { min-width: 0; flex: 1 1 auto; }
 .banner .banner-title { font-weight: 800; }
 .banner .banner-text { margin-top: 4px; font-size: 14px; color: var(--ink-2); }
@@ -357,11 +405,15 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .photo .fill { position: absolute; inset: 0; background-size: cover; background-position: center; }
 .photo .fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.55), transparent 55%); }
 .photo .tag { position: absolute; left: 10px; bottom: 10px; font-family: var(--font-mono); font-size: 11px; color: rgba(255,255,255,.85); }
+.photo .seq {
+  position: absolute; left: 8px; top: 8px; font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: #fff; background: rgba(18,22,31,.55); padding: 2px 7px; border-radius: var(--r-sm); backdrop-filter: blur(4px);
+}
 .photo .state { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-sm); backdrop-filter: blur(6px); }
-.photo .state.s-ok { background: rgba(61,220,151,.22); color: var(--ok); }
-.photo .state.s-wait { background: rgba(255,185,90,.25); color: var(--wait); }
+.photo .state.s-ok { background: rgba(15,122,74,.75); color: #fff; }
+.photo .state.s-wait { background: rgba(154,100,0,.75); color: #fff; }
 .photo.is-bad { border: 2px solid var(--bad); }
-.photo.is-wait .fill { filter: saturate(.6); }
+.photo.is-wait .fill { filter: saturate(.75); }
 .photo .retry {
   position: absolute; left: 0; right: 0; bottom: 0; min-height: 44px;
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -381,7 +433,7 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 }
 .list-row:first-child { border-top: 0; }
 .list-row:hover { background: var(--surface-2); }
-.list-row.has-problem { background: linear-gradient(90deg, rgba(255,93,93,.08), transparent 40%); }
+.list-row.has-problem { background: linear-gradient(90deg, rgba(192,38,38,.06), transparent 40%); }
 .list-row .who .name { font-weight: 700; font-size: 17px; }
 .list-row .who .code { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); margin-top: 4px; overflow-wrap: anywhere; }
 .list-row .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
@@ -389,11 +441,11 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 /* -------------------------------------------------------------- dialog */
 
 .dialog {
-  border: 1px solid var(--line-strong); border-radius: var(--r-xl); padding: 32px; width: min(560px, calc(100vw - 32px));
+  border: 1px solid var(--line); border-radius: var(--r-xl); padding: 32px; width: min(560px, calc(100vw - 32px));
   background: var(--surface); color: var(--ink); box-shadow: var(--shadow-overlay);
   max-height: calc(100vh - 32px); overflow: auto;
 }
-.dialog::backdrop { background: rgba(0, 0, 0, .65); }
+.dialog::backdrop { background: rgba(18, 22, 31, .45); }
 .dialog[open] { animation: masuk var(--t-base) var(--ease); }
 .dialog-actions { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
 .dialog-actions .btn { flex: 1 1 200px; min-height: 56px; }
@@ -411,7 +463,7 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .mirror-lg { width: 432px; max-width: 100%; }
 .mirror-unknown::after {
   content: attr(data-pesan); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  text-align: center; padding: 24px; background: rgba(10,12,17,.85); color: var(--bad-strong); font-weight: 700;
+  text-align: center; padding: 24px; background: rgba(18,22,31,.82); color: #fff; font-weight: 700;
 }
 
 /* -------------------------------------------------------------- kosong */
@@ -422,18 +474,20 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .skel { background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2)); background-size: 200% 100%; border-radius: var(--r-sm); animation: kerangka 1.4s ease-in-out infinite; color: transparent; }
 @keyframes kerangka { 0% { opacity: .55; } 50% { opacity: 1; } 100% { opacity: .55; } }
 
+/* Toast: elemen mengambang sesaat, sama seperti dialog — satu-satunya dua
+   tempat lain yang boleh memakai --shadow-overlay (design.md §2.5). */
 .toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
-  background: var(--surface-3); border: 1px solid var(--line-strong); color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line-strong); color: var(--ink);
   padding: 12px 18px; border-radius: var(--r-md); box-shadow: var(--shadow-overlay); font-weight: 600;
   animation: masuk var(--t-base) var(--ease); max-width: calc(100vw - 32px);
 }
-.toast.is-bad { border-color: rgba(255,93,93,.5); color: var(--bad-strong); }
-.toast.is-ok { border-color: rgba(61,220,151,.5); color: var(--ok); }
+.toast.is-bad { border-color: rgba(192,38,38,.4); color: var(--bad-strong); }
+.toast.is-ok { border-color: rgba(15,122,74,.35); color: var(--ok); }
 
 .kbd { font-family: var(--font-mono); font-size: 12px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--surface-3); }
 
-.qr-preview { width: 200px; aspect-ratio: 1; background: #fff; border-radius: var(--r-md); padding: 12px; display: block; }
+.qr-preview { width: 200px; aspect-ratio: 1; background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; display: block; }
 .qr-preview img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 
 .step-list { margin: 0; padding-left: 22px; color: var(--ink-2); line-height: 1.9; }
@@ -444,19 +498,38 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .guest {
   min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 6vw 5vw; text-align: center; position: relative; overflow: hidden;
-  background: radial-gradient(70vw 50vw at 50% -10%, rgba(139,124,255,.28), transparent 60%),
-              radial-gradient(60vw 40vw at 50% 110%, rgba(61,220,151,.14), transparent 60%), var(--bg);
+  background: radial-gradient(70vw 50vw at 50% -10%, rgba(27,79,216,.06), transparent 60%),
+              radial-gradient(60vw 40vw at 50% 110%, rgba(249,115,22,.05), transparent 60%), var(--bg);
 }
 .guest [data-variant] { display: none; width: 100%; max-width: 100%; }
 .guest [data-variant].is-on { display: flex; flex-direction: column; align-items: center; animation: masuk var(--t-base) var(--ease); }
 .guest-wordmark { display: flex; align-items: center; gap: 1.4vw; font-size: 5vw; font-weight: 800; letter-spacing: -.03em; margin: 0; }
-.guest-wordmark .mark { width: 5vw; height: 5vw; border-radius: 1.3vw; background: linear-gradient(135deg, var(--accent), #5ee7c8); box-shadow: 0 0 6vw rgba(139,124,255,.6); position: relative; }
-.guest-wordmark .mark::after { content: ""; position: absolute; inset: 28%; border-radius: 50%; background: var(--bg); box-shadow: inset 0 0 0 .5vw rgba(255,255,255,.9); }
+.guest-wordmark .mark {
+  width: 5vw; height: 5vw; border-radius: 1.3vw;
+  background-image: url("logo-mark.svg"), linear-gradient(135deg, var(--accent), var(--secondary));
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, center;
+  background-size: 60%, cover;
+}
 .guest-lead { font-size: 3vw; line-height: 1.35; color: var(--ink-2); max-width: 80vw; margin: 4vw 0 0; }
 .guest-kicker { font-family: var(--font-mono); font-size: 1.8vw; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-strong); margin: 0 0 2vw; }
-.guest-name { font-size: 8.6vw; line-height: 1.02; font-weight: 800; letter-spacing: -.035em; margin: 0; overflow-wrap: anywhere; }
+/* Kicker tamu memakai oranye hanya di keadaan QR siap — makna "sesi selesai",
+   sama dengan chip operator (design.md §0 v1.2). */
+.guest [data-variant="qr"] .guest-kicker { color: var(--secondary-strong); position: relative; padding-left: 1.6vw; }
+.guest [data-variant="qr"] .guest-kicker::before {
+  content: ""; position: absolute; left: 0; top: 50%; width: 1.1vw; height: 1.1vw; transform: translateY(-55%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M10 1l1.8 5.9L18 9l-6.2 2.1L10 17l-1.8-5.9L2 9l6.2-2.1L10 1z' fill='%23f97316'/%3E%3C/svg%3E");
+  background-size: contain; background-repeat: no-repeat;
+}
+.guest-name { font-size: 8.6vw; line-height: 1.02; font-weight: 800; letter-spacing: -.035em; margin: 0; overflow-wrap: anywhere; position: relative; display: inline-block; }
 .guest-name.is-long { font-size: 6.4vw; }
 .guest-name.is-verylong { font-size: 5vw; }
+/* Garis bawah bergelombang oranye — hanya di layar QR siap, satu instans. */
+.guest [data-variant="qr"] .guest-name::after {
+  content: ""; position: absolute; left: 1%; right: 6%; bottom: -.06em; height: .09em;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10' viewBox='0 0 40 10'%3E%3Cpath d='M0 6.5c3-4 6-6 10-2s7 6 10 2 6-6 10-2 7 6 10 2' fill='none' stroke='%23f97316' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: repeat-x; background-size: 8% 100%; opacity: .65;
+}
 .guest-sub { font-size: 3.4vw; color: var(--ink-2); margin: 1.6vw 0 0; }
 .guest-sub .num { color: var(--ink); font-weight: 800; }
 .guest-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2vw; width: 100%; margin-top: 4vw; }
@@ -467,7 +540,7 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 .guest-empty { width: 100%; aspect-ratio: 3 / 1.4; border-radius: 2vw; border: .2vw dashed var(--line-strong); display: flex; align-items: center; justify-content: center; color: var(--ink-3); font-size: 2.6vw; margin-top: 4vw; }
 .guest-note { display: inline-flex; align-items: center; gap: 1.2vw; margin: 4vw 0 0; padding: 1.4vw 2.6vw; border-radius: var(--r-pill); background: var(--surface-2); border: 1px solid var(--line); font-size: 2.2vw; color: var(--ink-2); }
 .guest-note .dot { width: 1.2vw; height: 1.2vw; flex-basis: 1.2vw; }
-.qr-card { background: #fff; border-radius: 3vw; padding: 3vw; width: 58vw; aspect-ratio: 1; margin: 3vw auto 0; box-shadow: 0 0 10vw rgba(139,124,255,.35); }
+.qr-card { background: #fff; border: 1px solid var(--line-strong); border-radius: 3vw; padding: 3vw; width: 58vw; aspect-ratio: 1; margin: 3vw auto 0; }
 .qr-card img, .qr-card svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .qr-card.is-missing { display: flex; align-items: center; justify-content: center; color: #000; font-size: 2.4vw; font-weight: 700; padding: 6vw; }
 .guest-instruction { font-size: 3.3vw; font-weight: 700; margin: 3vw 0 0; }

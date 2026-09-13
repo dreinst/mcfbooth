@@ -123,4 +123,4 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 
 ## 13. Referensi
 
-Detail teknis komponen, skema database, dan struktur folder ada di `arsitektur-sistem-photobooth.md`.
+Detail teknis komponen, skema database, dan struktur folder ada di `architecture.md`.

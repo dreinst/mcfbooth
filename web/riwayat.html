@@ -60,10 +60,16 @@
             <svg class="search-icon" width="22" height="22" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.8"/><path d="M13.5 13.5 17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
             <input class="input input-search" id="inputCari" type="search" placeholder="mis. Budi, atau Budi_Ani_2026" autocomplete="off" data-cari>
           </div>
+          <div class="row" style="margin-top:14px" role="group" aria-label="Saring daftar yang sudah dimuat">
+            <button class="chip chip-filter" type="button" data-filter="semua" aria-pressed="true">Semua <span class="n mono-plain" data-filter-n="semua">0</span></button>
+            <button class="chip chip-filter" type="button" data-filter="lengkap" aria-pressed="false">Lengkap <span class="n mono-plain" data-filter-n="lengkap">0</span></button>
+            <button class="chip chip-filter" type="button" data-filter="masalah" aria-pressed="false">Perlu tindakan <span class="n mono-plain" data-filter-n="masalah">0</span></button>
+          </div>
           <div class="row-between" style="margin-top:12px">
             <span class="small subtle" data-ringkasan-riwayat>memuat…</span>
             <span class="small subtle" data-ringkasan-hari></span>
           </div>
+          <p class="small subtle is-quiet" data-filter-catatan hidden style="margin:8px 0 0">Saringan ini hanya berlaku pada baris yang sudah dimuat di bawah — ketik pencarian untuk menjangkau sesi lain.</p>
         </div>
 
         <div class="card card-flush">

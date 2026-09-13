@@ -39,3 +39,7 @@ tether_dropbox/
 
 # Saklar mode uji Drive palsu.
 drive-palsu-mati
+
+# Arsip mentah paket desain (Stitch dkk.) — bahan kurasi, bukan kode. Yang
+# dipakai berakhir sebagai perubahan nyata di web/ dan catatan di design.md.
+*.zip
