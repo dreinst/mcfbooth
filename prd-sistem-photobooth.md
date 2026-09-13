@@ -34,7 +34,7 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 ### Termasuk (v1)
 
 - Platform Windows
-- Tethering kamera DSLR/mirrorless lewat aplikasi tethering yang menulis ke folder (misalnya digiCamControl atau qDslrDashboard)
+- Tethering kamera DSLR/mirrorless lewat aplikasi tethering yang menulis ke folder (Imaging Edge Desktop untuk Sony; digiCamControl sebagai cadangan)
 - Satu kamera & satu laptop operator per waktu
 - Layar terpisah untuk tamu (monitor kedua) yang mengikuti sesi sendiri — dipindahkan dari v2 ke v1, lihat `design.md` §1
 - Google Drive sebagai storage & distribusi ke tamu
@@ -102,7 +102,7 @@ Sistem ini membuat proses itu otomatis: begitu operator selesai motret satu sesi
 
 - Venue punya koneksi internet yang cukup (meski tidak stabil) untuk upload akhirnya berhasil — sistem menangani keterlambatan, bukan ketiadaan internet total permanen.
 - Operator punya akun Google dengan kuota Drive yang cukup untuk menampung foto event.
-- Kamera yang dipakai didukung aplikasi tethering yang bisa menulis ke folder (misalnya digiCamControl atau qDslrDashboard).
+- Kamera yang dipakai didukung aplikasi tethering yang bisa menulis ke folder (Imaging Edge Desktop atau digiCamControl).
 - Satu laptop menangani satu sesi aktif pada satu waktu (tidak ada dua sesi paralel di v1).
 
 ## 11. Metrik Keberhasilan

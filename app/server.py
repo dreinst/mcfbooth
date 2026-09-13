@@ -48,7 +48,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 KAMERA = os.environ.get("CAMERA_MODEL", "Sony ZV-E10")
-TETHERING_APP = os.environ.get("TETHERING_APP", "")
+TETHERING_APP = os.environ.get("TETHERING_APP", "Imaging Edge Desktop")
 IZINKAN_TANPA_DRIVE = env_bool("MCF_IZINKAN_TANPA_DRIVE", False)
 THUMBS_DIR = watcher.THUMBS_DIR
 QR_DIR = qr.QR_DIR
@@ -73,7 +73,7 @@ async def daur_hidup(app: FastAPI):
     qr.siapkan()
     watcher.mulai()
     log.info("=== MCF Photobooth %s dimulai ===", VERSI)
-    log.info("Kamera: %s, aplikasi tethering: %s", KAMERA, TETHERING_APP or "(belum diisi di .env)")
+    log.info("Kamera: %s via %s", KAMERA, TETHERING_APP)
     log.info("Tether dropbox: %s", watcher.TETHER_DIR)
     log.info("Arsip lokal: %s", watcher.ARCHIVE_DIR)
     log.info("Folder induk Drive: %s", drive_client.PARENT_FOLDER_ID or "(dibuat aplikasi)")

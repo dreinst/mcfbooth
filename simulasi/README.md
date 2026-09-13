@@ -15,8 +15,8 @@ simulasi/
 
 ## Yang mengisi masing-masing
 
-`tether_dropbox/` diisi oleh aplikasi tethering (digiCamControl atau sejenisnya),
-bukan oleh aplikasi. Aplikasi hanya memantaunya dan tidak pernah
+`tether_dropbox/` diisi oleh aplikasi tethering (Imaging Edge Desktop atau
+digiCamControl), bukan oleh aplikasi. Aplikasi hanya memantaunya dan tidak pernah
 menghapus isinya — jadi di lapangan folder ini menumpuk semua jepretan acara.
 
 `local_archive/<kode_sesi>/` diisi oleh pemantau folder — lapis backup kedua setelah

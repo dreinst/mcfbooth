@@ -36,7 +36,7 @@ flowchart LR
     subgraph BOOTH["Booth di venue"]
         CAM["Kamera Sony<br/>(USB tethering)"]
         subgraph LAPTOP["Laptop operator (Windows)"]
-            TETHER["Aplikasi tethering<br/>menulis ke tether_dropbox/"]
+            TETHER["Imaging Edge Desktop<br/>menulis ke tether_dropbox/"]
             SERVER["Server MCF Photobooth<br/>FastAPI · 127.0.0.1:8000"]
             OP["Browser — jendela operator<br/>Sesi · Riwayat · Layar tamu · Pengaturan"]
             DB[("sessions.db<br/>SQLite")]
@@ -67,9 +67,9 @@ mengikat ke `127.0.0.1`, jadi satu-satunya lalu lintas keluar adalah laptop → 
 
 | Perangkat | Peran | Catatan |
 |---|---|---|
-| Kamera Sony (ZV-E10 atau bodi lain yang didukung aplikasi tethering yang dipakai) | memotret | setelan JPEG, auto power-off mati, baterai dummy untuk acara panjang |
+| Kamera Sony (ZV-E10 atau bodi lain yang didukung Imaging Edge Remote) | memotret | setelan JPEG, auto power-off mati, baterai dummy untuk acara panjang |
 | Kabel USB kamera → laptop | jalur tethering | Wifi bawaan kamera tidak dipakai, terlalu lambat dan gampang putus |
-| Laptop Windows | menjalankan aplikasi tethering, server, dan browser | Python 3.11+, tidak perlu port terbuka |
+| Laptop Windows | menjalankan Imaging Edge Desktop, server, dan browser | Python 3.11+, tidak perlu port terbuka |
 | Monitor kedua 1920 × 1080, diputar portrait | layar tamu | dihubungkan HDMI, diatur *Portrait* di pengaturan tampilan Windows, menghadap tamu |
 | Wifi venue | upload ke Drive | boleh putus-nyambung, sistem menyusulkan upload begitu tersambung |
 | HP tamu | memindai QR, mengunduh dari Drive | butuh internet HP sendiri; tidak ada aplikasi yang harus dipasang |
@@ -180,7 +180,7 @@ sequenceDiagram
     W-)UI: SSE sesi_drive_terpasang
 
     loop tiap jepretan
-        Op->>W: jepret, aplikasi tethering menulis IMG_0041.JPG ke tether_dropbox/
+        Op->>W: jepret, Imaging Edge menulis IMG_0041.JPG ke tether_dropbox/
         W->>W: tunggu ukuran stabil 1,5 detik & bisa dibuka
         W->>W: salin atomik ke local_archive/kode_sesi/, thumbnail 400px
         W->>DB: INSERT photo_uploads status=pending
@@ -320,7 +320,7 @@ server.
 
 1. Buka aplikasi. Kalau consent screen Google masih berstatus *Testing*, login ulang
    paling lambat malam sebelum acara (refresh token mati setelah 7 hari).
-2. Sambungkan kamera, buka aplikasi tethering, arahkan folder simpannya ke path yang
+2. Sambungkan kamera, buka Imaging Edge Remote, arahkan folder simpannya ke path yang
    tertulis di Pengaturan → Folder tethering.
 3. Jepret sekali. Foto akan berakhir di `local_archive/_tanpa_sesi/` karena belum ada
    sesi, dan pita kuning "1 foto masuk saat tidak ada sesi" muncul di halaman Sesi.
@@ -488,7 +488,7 @@ Detail yang dialami tamu di tiap keadaan:
 sebelum sesi mulai.
 
 **Memotret.** Begitu operator menekan Mulai Sesi, nama tamu muncul besar. Tiap jepretan
-muncul di grid dalam beberapa detik (jeda = tulis berkas oleh aplikasi tethering + 1,5 detik
+muncul di grid dalam beberapa detik (jeda = tulis berkas oleh Imaging Edge + 1,5 detik
 cek stabil + salin + thumbnail), dengan satu gerak masuk 200 ms. Grid hanya menampilkan
 enam foto terbaru supaya layar tidak pernah perlu digulir. Angka "N foto sejauh ini"
 adalah jumlah foto yang **masuk**, bukan yang sudah di Drive. Pil di bawah grid menjawab
@@ -691,7 +691,7 @@ pembacaan operator. `lower()` diganti fungsi Python supaya "élan" menemukan "É
 
 ```
 <akar repo>/
-├── tether_dropbox/            diisi aplikasi tethering; dipantau rekursif; TIDAK PERNAH dihapus aplikasi
+├── tether_dropbox/            diisi Imaging Edge; dipantau rekursif; TIDAK PERNAH dihapus aplikasi
 ├── local_archive/
 │   ├── <kode_sesi>/           salinan permanen per sesi (lapis backup 2) — IMG_0041.JPG, IMG_0041_2.JPG
 │   └── _tanpa_sesi/           jepretan saat tidak ada sesi; dipindahkan manual
@@ -781,7 +781,7 @@ Semua opsional; path relatif dihitung dari akar repo.
 
 | Variabel | Bawaan | Arti |
 |---|---|---|
-| `CAMERA_MODEL`, `TETHERING_APP` | Sony ZV-E10, kosong | label di Pengaturan dan log |
+| `CAMERA_MODEL`, `TETHERING_APP` | Sony ZV-E10, Imaging Edge Desktop | label di Pengaturan dan log |
 | `TETHER_DROPBOX`, `LOCAL_ARCHIVE`, `THUMBS`, `QR_CODES`, `MCF_DB` | di akar repo | lokasi folder kerja dan database |
 | `DRIVE_PARENT_FOLDER_ID` | kosong | hanya berguna kalau ID itu folder buatan aplikasi ini; kalau ditolak, aplikasi memakai induknya sendiri |
 | `DRIVE_ROOT_NAME`, `DRIVE_FOLDER_QR`, `DRIVE_FOLDER_RESULT` | MCF Photobooth, 1. QR, 2. Result | nama struktur di Drive |
@@ -801,8 +801,8 @@ Semua opsional; path relatif dihitung dari akar repo.
 
 | Bagian | Pilihan | Alasan singkat |
 |---|---|---|
-| OS produksi | Windows | aplikasi tethering (digiCamControl dan sejenisnya) hanya ada di sana; kode berjalan di macOS untuk pengembangan |
-| Tethering | aplikasi apa pun yang menulis ke folder; yang tercatat digiCamControl dan qDslrDashboard | menulis berkas ke folder, itu satu-satunya kontrak yang dibutuhkan watcher |
+| OS produksi | Windows | Imaging Edge Desktop dan digiCamControl hanya ada di sana; kode berjalan di macOS untuk pengembangan |
+| Tethering | Imaging Edge Desktop (Sony); cadangan digiCamControl, qDslrDashboard | menulis berkas ke folder, itu satu-satunya kontrak yang dibutuhkan watcher |
 | Backend | Python 3.11+, FastAPI, uvicorn, sse-starlette | ringan, satu proses, dokumentasi endpoint gratis di `/docs` |
 | Pemantau folder | watchdog | `on_created` dan `on_moved`, rekursif |
 | Database | SQLite (WAL) | satu berkas, bisa dibawa pindah laptop |
@@ -827,7 +827,7 @@ folder kerja sementara, jadi tidak menyentuh data milik operator.
 
 `simulasi/` berisi kerangka folder kerja dan dua JPEG gradien 14 KB yang dipakai skrip
 uji. Yang **belum** pernah diuji dan harus dicoba sebelum acara pertama: akun Drive
-sungguhan dan kamera sungguhan (cara aplikasi tethering menulis berkas: langsung atau lewat
+sungguhan dan kamera sungguhan (cara Imaging Edge menulis berkas: langsung atau lewat
 nama sementara lalu rename; keduanya ditangani).
 
 ---

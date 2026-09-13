@@ -18,7 +18,7 @@ Dua hal yang hanya bisa dibuktikan di lapangan, dan harus dicoba **sebelum** aca
 1. **Google Drive dengan kredensial asli.** Login, pembuatan folder, izin anyone-with-link,
    dan upload belum pernah dijalankan terhadap akun nyata. Caranya di seksi Google Drive.
 2. **Kamera dan aplikasi tethering.** Watcher hanya melihat berkas yang jatuh ke
-   `tether_dropbox/`; bagaimana aplikasi tethering menulis berkas itu (langsung, atau lewat nama
+   `tether_dropbox/`; bagaimana Imaging Edge menulis berkas itu (langsung, atau lewat nama
    sementara lalu rename) baru ketahuan dengan kamera terpasang. Keduanya ditangani, tapi
    colok dan coba lima menit lebih dulu.
 
@@ -55,9 +55,8 @@ Urutan baca untuk orang baru: PRD, lalu arsitektur, lalu `design.md`.
 
 ## Instalasi di Windows
 
-Target produksi sistem ini Windows, karena aplikasi tethering yang dipakai (digiCamControl
-dan sejenisnya) hanya ada di sana. Yang perlu dipasang cuma Python dan Git; sisanya ikut
-lewat `pip`.
+Target produksi sistem ini Windows — Imaging Edge Desktop dan digiCamControl hanya ada di
+sana. Yang perlu dipasang cuma Python dan Git; sisanya ikut lewat `pip`.
 
 1. Pasang **Python 3.11 atau lebih baru** dari [python.org](https://www.python.org/downloads/).
    Di layar pertama installer, centang **"Add python.exe to PATH"**.
@@ -196,29 +195,27 @@ berkas foto yang jatuh ke `tether_dropbox/`. Integrasi kamera berarti satu hal: 
 harus mendarat ke folder itu secara otomatis. Label kamera dan aplikasi yang tampil di
 Pengaturan diatur lewat `CAMERA_MODEL` dan `TETHERING_APP` di `.env`.
 
-### Menyambungkan aplikasi tethering
+### Jalur utama: Imaging Edge Desktop (aplikasi resmi Sony, Windows)
 
-Aplikasi tethering apa pun bisa dipakai selama ia menyimpan jepretan ke folder di laptop.
-Dua yang tercatat untuk bodi Sony:
-
-- **digiCamControl**: dukungan Sony-nya eksperimental. Layak dicoba, jangan diandalkan
-  sebelum terbukti.
-- **qDslrDashboard** mendukung sebagian bodi Sony.
-
-Wifi bawaan kamera tidak dipakai: lambat dan gampang putus di venue yang ramai sinyal.
-
-1. Pasang aplikasi tethering pilihanmu di laptop Windows.
+1. Pasang **Imaging Edge Desktop** dari situs Sony, buka modul **Remote**.
 2. Di kamera: **Menu → Setup → USB Connection → PC Remote**.
-3. Sambungkan kamera ke laptop lewat USB; kamera muncul di aplikasi tethering.
-4. Di aplikasi tethering, arahkan folder penyimpanan ke folder yang dipantau aplikasi.
-   Path persisnya tertulis di Pengaturan → Folder tethering. Subfolder otomatis (per
-   tanggal atau per sesi) boleh tetap menyala: pemantau melihat seluruh isi folder itu.
+3. Sambungkan kamera ke laptop lewat USB; kamera muncul di Remote.
+4. Di Remote, arahkan folder penyimpanan ke folder yang dipantau aplikasi — path
+   persisnya tertulis di Pengaturan → Folder tethering. Subfolder otomatis (per tanggal
+   atau per sesi) boleh tetap menyala: pemantau melihat seluruh isi folder itu.
 5. Jepret sekali. Kalau berkasnya muncul di grid halaman Sesi dan di layar tamu dalam
    beberapa detik, integrasi beres.
 
-Daftar bodi yang didukung tiap aplikasi berubah antar versi. Verifikasi sendiri dengan
-kamera terpasang, jangan percaya dokumen ini. PRD §12 menaruh dukungan tethering sebagai
-risiko nomor satu.
+Sony ZV-E10 didukung Imaging Edge Remote. Untuk bodi lama seperti a6000, daftar dukungan
+berubah antar versi — verifikasi sendiri, jangan percaya dokumen ini. PRD §12 menaruh
+dukungan tethering sebagai risiko nomor satu.
+
+### Kalau jalur utama gagal
+
+- **digiCamControl**: dukungan Sony-nya eksperimental — layak dicoba, jangan diandalkan
+  sebelum terbukti.
+- **qDslrDashboard** mendukung sebagian bodi Sony.
+- Wifi bawaan kamera tidak dipakai: lambat dan gampang putus di venue yang ramai sinyal.
 
 ### Setelan kamera yang disarankan
 
