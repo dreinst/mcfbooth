@@ -53,6 +53,7 @@ PARENT_FOLDER_ID = os.environ.get("DRIVE_PARENT_FOLDER_ID", "").strip()
 NAMA_ROOT = os.environ.get("DRIVE_ROOT_NAME", "MCF Photobooth").strip() or "MCF Photobooth"
 NAMA_FOLDER_QR = os.environ.get("DRIVE_FOLDER_QR", "1. QR").strip()
 NAMA_FOLDER_RESULT = os.environ.get("DRIVE_FOLDER_RESULT", "2. Result").strip()
+NAMA_FOLDER_SERTIFIKAT = os.environ.get("DRIVE_FOLDER_SERTIFIKAT", "3. Sertifikat").strip() or "3. Sertifikat"
 HTTP_TIMEOUT = env_float("DRIVE_HTTP_TIMEOUT", 20)
 LOGIN_TIMEOUT = env_float("DRIVE_LOGIN_TIMEOUT", 240)
 PALSU = env_bool("MCF_DRIVE_PALSU", False)
@@ -141,6 +142,7 @@ class _DrivePalsu:
                 "upload_sukses": self.n_upload,
                 "upload_gagal": self.n_upload_gagal,
                 "berkas_per_folder_sesi": sesi,
+                "berkas_sertifikat": list(self.berkas.get("palsu-sertifikat", [])),
             }
 
 
@@ -539,7 +541,7 @@ def _subfolder(nama: str, kunci_cache: str) -> str | None:
     """Subfolder bernama `nama` di bawah folder induk, dibuat kalau belum ada.
     ID-nya diingat supaya tidak ada files.list di tiap Mulai Sesi."""
     if PALSU:
-        fid = "palsu-qr" if kunci_cache == "drive_qr_id" else "palsu-result"
+        fid = {"drive_qr_id": "palsu-qr", "drive_sertifikat_id": "palsu-sertifikat"}.get(kunci_cache, "palsu-result")
         folder_induk()
         _palsu.folder.setdefault(fid, {"nama": nama, "parent": "palsu-root"})
         _palsu.berkas.setdefault(fid, [])
@@ -632,6 +634,30 @@ def upload_qr(qr_path: str, nama_file: str) -> dict | None:
         return None
 
 
+def upload_sertifikat(path_lokal: str, cek_dulu: bool = False) -> dict | None:
+    """Upload sertifikat Pet Blessing ke subfolder '3. Sertifikat' lalu buka
+    izin baca lewat tautan per berkas (bukan per folder), supaya tautan satu
+    sertifikat tidak membuka sertifikat pemilik lain."""
+    parent = _subfolder(NAMA_FOLDER_SERTIFIKAT, "drive_sertifikat_id")
+    if not parent:
+        return None
+    hasil = upload_foto(path_lokal, parent, cek_dulu=cek_dulu)
+    if not hasil or PALSU:
+        return hasil
+    try:
+        svc = _svc()
+        svc.permissions().create(
+            fileId=hasil["id"], body={"type": "anyone", "role": "reader"}, fields="id",
+        ).execute()
+        if not hasil.get("link"):
+            meta = svc.files().get(fileId=hasil["id"], fields="webViewLink").execute()
+            hasil["link"] = meta.get("webViewLink", "")
+        return hasil
+    except Exception as e:
+        log.error("Gagal membuka izin sertifikat %s: %s", path_lokal, str(e)[:200])
+        return None
+
+
 def upload_foto(path_lokal: str, folder_id: str, custom_name: str | None = None,
                 cek_dulu: bool = False) -> dict | None:
     """Upload satu berkas ke folder Drive. Returns {"id", "link"} atau None.
@@ -663,6 +689,7 @@ def upload_foto(path_lokal: str, folder_id: str, custom_name: str | None = None,
         mime = {
             ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
             ".tif": "image/tiff", ".tiff": "image/tiff", ".heic": "image/heic",
+            ".pdf": "application/pdf",
         }.get(ext, "application/octet-stream")
         media = MediaFileUpload(str(path), mimetype=mime, resumable=True, chunksize=4 * 1024 * 1024)
         meta = {"name": nama, "parents": [folder_id]}

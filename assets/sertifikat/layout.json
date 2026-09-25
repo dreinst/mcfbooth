@@ -1,0 +1,14 @@
+{
+  "_sumber": "Figma Pet Blessing 2026 (file 2dOiNNi8zcjaFPfGl8Wp8E), frame sertifikat 115, dibaca 25 Sep 2026. Satuan px pada kanvas 3508x2480 (A4 300 dpi).",
+  "ukuran": [3508, 2480],
+  "dpi": 300,
+  "foto": {"x": 263, "y": 331, "w": 1205, "h": 1795, "radius": 100},
+  "kolom_teks": {"x": 1595, "w": 1605},
+  "baris": [
+    {"label": "Jenis Hewan:", "isi": "jenis", "top": 637, "ukuran": 40, "jarak": 10, "pad_isi": 10},
+    {"isi": "nama_hewan", "top": 732, "ukuran": 70},
+    {"label": "Sahabat Kesayangan dari:", "isi": "pemilik", "top": 882, "ukuran": 40, "jarak": 15, "pad_isi": 10}
+  ],
+  "font": {"label": "Poppins-SemiBold.ttf", "isi": "Poppins-ExtraBold.ttf"},
+  "warna_teks": [0, 0, 0]
+}

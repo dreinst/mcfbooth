@@ -754,6 +754,27 @@ membersihkan lewat Explorer.
 
 ---
 
+## 11a. Mode Pet Blessing: sertifikat otomatis
+
+Aktif dengan `MCF_MODE=petblessing`. Tiga modul tambahan:
+
+| Modul | Tanggung jawab |
+|---|---|
+| `app/petblessing.py` | Membaca daftar pemilik + hewan dari PostgREST database pendaftaran (peran `booth_worker`), menyimpan salinannya di `pengaturan` untuk saat offline, menulis `pets.mcfbooth_session_code` dan `pets.certificate_url`. |
+| `app/sertifikat.py` | Render: foto (cover crop) di bawah `assets/sertifikat/template.png`, tiga isian ditulis dengan Poppins di koordinat `layout.json`, simpan PNG + PDF 300 dpi. Alur: tabel `sertifikat` dengan status `render` → `menunggu` → `uploaded` (+ `tercatat`), atau `failed`. |
+| `drive_client.upload_sertifikat` | Subfolder "3. Sertifikat", izin baca per berkas (bukan per folder). |
+
+Alur: `GET /api/pb/pemilik?kode=` → `POST /api/sessions {owner_id, pet_id}` (nama sesi
+disusun server, data hewan disimpan di `sessions.pb_data`) → foto seperti biasa →
+`POST /api/sessions/{id}/sertifikat {photo_id}` (202, dikerjakan di pool upload) →
+peristiwa SSE `sertifikat_mulai`, `_siap`, `_uploaded`, `_tertunda`, `_tercatat`, `_gagal`.
+Penjaga latar memanggil `sertifikat.susulkan()` tiap putaran.
+
+Template diambil dari Figma, bukan dirender Figma: API Figma hanya bisa membaca dan
+mengekspor, tidak bisa mengisi gambar ke frame tanpa editor terbuka. Posisi teks
+diverifikasi terhadap ekspor frame asli (selisih maksimal 3 px horizontal pada kanvas
+3508 px, vertikal tepat).
+
 ## 12. Keamanan dan privasi
 
 - **Scope OAuth `drive.file`.** Aplikasi hanya melihat folder dan berkas yang dibuatnya.

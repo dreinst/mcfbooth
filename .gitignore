@@ -36,6 +36,7 @@ tether_dropbox/
 
 # Aset tampilan yang memang harus ikut repo.
 !web/favicon.svg
+!assets/sertifikat/template.png
 
 # Saklar mode uji Drive palsu.
 drive-palsu-mati

@@ -266,6 +266,7 @@
     var AMBANG_WAIT = 90, AMBANG_BAD = 180;
     var sesi = null, foto = [], jam = null, petak = {};
     var pf = null;
+    var modePb = false, pilihan = null, pemilikPb = null;
 
     var e = {
       nama: $('#inputNama'), mulai: $('#btnMulai'), alasanMulai: $('[data-alasan-mulai]'), hintNama: $('[data-hint-nama]'),
@@ -279,6 +280,11 @@
       meter: $('[data-meter]'), rasio: $('[data-rasio]'), grid: $('[data-grid]'), gridKosong: $('[data-grid-kosong]'), jumlahFoto: $('[data-jumlah-foto]'),
       chipSesi: $('[data-chip-sesi]'), chipUpload: $('[data-chip-upload]'),
       dialog: $('#dialogSelesai'), btnSelesai: $('#btnSelesai'), alasanSelesai: $('[data-alasan-selesai]'),
+      kartuPb: $('[data-kartu-pb]'), kartuNama: $('[data-kartu-nama]'), kodePb: $('#inputKodePb'), hintPb: $('[data-pb-hint]'),
+      hasilPb: $('[data-pb-hasil]'), nomorPb: $('[data-pb-nomor]'), pemilikPb: $('[data-pb-pemilik]'), hewanPb: $('[data-pb-hewan]'), alasanPb: $('[data-alasan-pb]'),
+      kameraWrap: $('[data-pb-kamera-wrap]'), video: $('[data-pb-video]'),
+      kartuSrt: $('[data-kartu-sertifikat]'), chipSrt: $('[data-chip-sertifikat]'), infoSrt: $('[data-sertifikat-info]'), btnSrt: $('[data-buat-sertifikat]'),
+      pdfSrt: $('[data-sertifikat-pdf]'), driveSrt: $('[data-sertifikat-drive]'), imgSrt: $('[data-sertifikat-img]'),
       qrNama: $('[data-qr-nama]'), qrJumlah: $('[data-qr-jumlah]'), qrLink: $('[data-qr-link]'), qrImg: $('[data-qr-img]'), qrUnduh: $('[data-qr-unduh]'), qrTanpa: $('[data-qr-tanpa-drive]')
     };
 
@@ -316,6 +322,18 @@
       else {
         setDisabled(e.mulai, false, e.alasanMulai, '');
         if (p.peringatan_mulai) { e.alasanMulai.hidden = false; e.alasanMulai.className = 'btn-reason is-wait'; e.alasanMulai.textContent = p.peringatan_mulai; }
+      }
+
+      if ((p.mode === 'petblessing') !== modePb) {
+        modePb = p.mode === 'petblessing';
+        e.kartuPb.hidden = !modePb; e.kartuNama.hidden = modePb;
+        if (modePb && root.dataset.tahapAktif === 'idle') e.kodePb.focus();
+      }
+      if (modePb) {
+        var alasanPb = !window.MCF.serverHidup ? 'Server tidak menjawab.' : !p.boleh_mulai ? p.alasan_tidak_boleh
+          : !p.pb_siap ? 'Sambungan ke database Pet Blessing belum diatur (PETBLESSING_API_URL dan PETBLESSING_BOOTH_TOKEN di .env).' : '';
+        e.alasanPb.textContent = alasanPb; e.alasanPb.hidden = !alasanPb;
+        $$('[data-pb-pilih]', e.hewanPb).forEach(function (b) { b.setAttribute('aria-disabled', alasanPb ? 'true' : 'false'); });
       }
 
       var pitaTanpa = $('[data-pita-tanpa-sesi]');
@@ -435,7 +453,8 @@
 
     function kelasFoto(s) { return 'photo' + (s === 'failed' ? ' is-bad' : s === 'pending' ? ' is-wait' : ''); }
     function isiPetak(node, f, urutan) {
-      node.className = kelasFoto(f.status);
+      node.className = kelasFoto(f.status) + (pilihan === f.id ? ' is-pilih' : '');
+      node.dataset.foto = String(f.id);
       node.innerHTML = '<span class="fill"></span>' +
         (urutan ? '<span class="seq mono-plain">#' + String(urutan).padStart(2, '0') + '</span>' : '') +
         '<span class="tag"></span>' +
@@ -486,6 +505,10 @@
     }
     function muatSesi(s) {
       pasangSesi(s); foto = []; kosongkanGrid();
+      pilihan = null; hentikanKamera();
+      e.kartuSrt.hidden = !s.pb;
+      if (s.pb) { root.setAttribute('data-sesi-pb', ''); gambarSertifikat(null); muatSertifikat(); }
+      else root.removeAttribute('data-sesi-pb');
       if (e.tertinggal) e.tertinggal.hidden = true;
       setChip(e.chipSesi, 'chip-ok', 'Sesi berjalan', 'dot-live'); e.chipSesi.hidden = false;
       tahap('aktif');
@@ -523,7 +546,12 @@
       clearInterval(jam); jam = null; sesi = null; foto = []; kosongkanGrid();
       e.nama.value = ''; e.chipSesi.hidden = true; tahap('idle'); render();
       setChip(e.chipUpload, 'chip-idle', 'Belum ada sesi', 'dot-idle');
-      window.MCF.muatPreflight(); e.nama.focus();
+      window.MCF.muatPreflight();
+      if (modePb) {
+        // Pemilik yang sama sering membawa lebih dari satu hewan: daftarnya
+        // dimuat ulang (status sertifikat terbaru) tanpa scan ulang.
+        if (pemilikPb) cariPb(pemilikPb.id); else e.kodePb.focus();
+      } else e.nama.focus();
     }
     function cobaLagi(id) {
       var f = foto.find(function (x) { return x.id === id; }); if (!f) return;
@@ -531,6 +559,94 @@
       api('/api/photos/' + id + '/retry', { method: 'POST' }).catch(function (err) { toast(err.message, 'bad'); muatUlangFoto(); });
     }
     function muatUlangFoto() { if (sesi) api('/api/sessions/' + sesi.id + '/photos').then(function (fs) { foto = fs; render(); }).catch(function () {}); }
+
+    /* ---- Pet Blessing: scan QR, pilih hewan ---- */
+    function cariPb(kode) {
+      kode = (kode || '').trim();
+      if (kode.length < 8) { e.hintPb.className = 'field-hint is-wait'; e.hintPb.textContent = 'Kode minimal 8 huruf.'; return; }
+      e.hintPb.className = 'field-hint'; e.hintPb.textContent = 'Mencari…';
+      api('/api/sessions/bersiap', { method: 'POST' }).catch(function () {});
+      api('/api/pb/pemilik?kode=' + encodeURIComponent(kode)).then(function (o) {
+        pemilikPb = o; e.kodePb.value = '';
+        e.hintPb.className = o.dari_salinan ? 'field-hint is-wait' : 'field-hint';
+        e.hintPb.textContent = o.dari_salinan ? 'Internet putus: data diambil dari salinan terakhir di laptop.' : '';
+        e.nomorPb.textContent = 'Nomor antrean ' + o.nomor + (o.uji ? ' · DATA UJI' : '');
+        e.pemilikPb.textContent = o.nama;
+        e.hewanPb.textContent = '';
+        o.hewan.forEach(function (h) {
+          var srt = h.sertifikat;
+          var ket = !srt ? 'belum difoto' : srt.status === 'uploaded' ? 'sertifikat sudah di Drive' : srt.status === 'failed' ? 'sertifikat gagal dibuat' : 'sertifikat menunggu upload';
+          var b = el('button', { class: 'btn pb-hewan' + (srt ? '' : ' btn-primary'), type: 'button', 'data-pb-pilih': h.id }, [
+            el('span', {}, [el('strong', { text: h.nama }), document.createTextNode(' · ' + h.jenis)]),
+            el('span', { class: 'small', text: ket })
+          ]);
+          e.hewanPb.appendChild(b);
+        });
+        e.hasilPb.hidden = false;
+        if (pf) gambarPreflight(pf);
+      }).catch(function (err) {
+        pemilikPb = null; e.hasilPb.hidden = true;
+        e.hintPb.className = 'field-hint is-bad'; e.hintPb.textContent = err.message;
+      });
+    }
+    function mulaiPb(petId) {
+      if (sesi || !pemilikPb) return;
+      api('/api/sessions', { method: 'POST', body: { owner_id: pemilikPb.id, pet_id: petId } }).then(muatSesi).catch(function (err) {
+        if (err.status === 409 && err.body.sesi_aktif) { gambarTertinggal(err.body.sesi_aktif); toast(err.message, 'bad'); }
+        else toast('Sesi tidak bisa dimulai: ' + err.message, 'bad');
+      });
+    }
+    var aliranKamera = null, detektor = null;
+    if ('BarcodeDetector' in window) { try { detektor = new window.BarcodeDetector({ formats: ['qr_code'] }); e.kameraWrap.hidden = false; } catch (x) { detektor = null; } }
+    function hentikanKamera() {
+      if (aliranKamera) aliranKamera.getTracks().forEach(function (t) { t.stop(); });
+      aliranKamera = null; if (e.video) e.video.hidden = true;
+    }
+    function mulaiKamera() {
+      if (aliranKamera) { hentikanKamera(); return; }
+      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 } } }).then(function (st) {
+        aliranKamera = st; e.video.srcObject = st; e.video.hidden = false; e.video.play();
+        (function pindai() {
+          if (!aliranKamera) return;
+          detektor.detect(e.video).then(function (hasil) {
+            if (hasil && hasil.length) { hentikanKamera(); cariPb(hasil[0].rawValue); } else setTimeout(pindai, 250);
+          }).catch(function () { setTimeout(pindai, 500); });
+        })();
+      }).catch(function () { toast('Kamera laptop tidak bisa dibuka.', 'bad'); });
+    }
+
+    /* ---- Pet Blessing: sertifikat ---- */
+    function gambarSertifikat(srt) {
+      var status = srt ? srt.status : null;
+      var t = !srt ? ['chip-idle', 'dot-idle', 'Belum dibuat', 'Tap foto terbaik di bawah, lalu tekan Buat sertifikat.']
+        : status === 'render' ? ['chip-wait', 'dot-wait', 'Sedang dibuat', 'Sertifikat sedang disusun dari foto pilihan.']
+        : status === 'menunggu' ? ['chip-wait', 'dot-wait', 'Menunggu upload', srt.pesan || 'Sertifikat siap di laptop, sedang dikirim ke Drive.']
+        : status === 'uploaded' ? ['chip-ok', 'dot-ok', srt.tercatat ? 'Di Drive, tercatat' : 'Di Drive', srt.tercatat ? 'PDF dan PNG sudah di Drive dan tautannya tercatat di data pendaftaran.' : 'PDF dan PNG sudah di Drive. Tautan ke data pendaftaran menyusul otomatis.']
+        : ['chip-bad', 'dot-bad', 'Gagal', 'Sertifikat gagal dibuat: ' + (srt.pesan || 'sebab tidak diketahui') + '. Pilih foto lain lalu coba lagi.'];
+      setChip(e.chipSrt, t[0], t[2], t[1]); e.infoSrt.textContent = t[3];
+      var adaBerkas = srt && srt.png_path;
+      e.imgSrt.hidden = !adaBerkas; if (adaBerkas) e.imgSrt.src = '/api/sertifikat/' + srt.id + '/berkas.png?v=' + srt.id + status;
+      e.pdfSrt.hidden = !adaBerkas; if (adaBerkas) e.pdfSrt.href = '/api/sertifikat/' + srt.id + '/berkas.pdf';
+      e.driveSrt.hidden = !(srt && srt.link_pdf); if (srt && srt.link_pdf) e.driveSrt.href = srt.link_pdf;
+      e.btnSrt.textContent = srt && status !== 'failed' ? 'Buat ulang dengan foto pilihan' : 'Buat sertifikat';
+      setDisabled(e.btnSrt, !pilihan || status === 'render');
+    }
+    function muatSertifikat() {
+      if (!sesi || !sesi.pb) return;
+      api('/api/sessions/' + sesi.id + '/sertifikat').then(function (daftar) { srtTerakhir = daftar[daftar.length - 1] || null; gambarSertifikat(srtTerakhir); }).catch(function () {});
+    }
+    var srtTerakhir = null;
+    function pilihFoto(id) {
+      pilihan = pilihan === id ? null : id;
+      $$('.photo', e.grid).forEach(function (n) { n.classList.toggle('is-pilih', n.dataset.foto === String(pilihan)); });
+      setDisabled(e.btnSrt, !pilihan || (srtTerakhir && srtTerakhir.status === 'render'));
+    }
+    function buatSertifikat() {
+      if (!sesi || !pilihan || nonaktif(e.btnSrt)) return;
+      setDisabled(e.btnSrt, true);
+      api('/api/sessions/' + sesi.id + '/sertifikat', { method: 'POST', body: { photo_id: pilihan } }).then(function (srt) { srtTerakhir = srt; gambarSertifikat(srt); })
+        .catch(function (err) { toast(err.message, 'bad'); setDisabled(e.btnSrt, false); });
+    }
 
     /* ---- dialog ---- */
     function isiDialog() {
@@ -565,6 +681,17 @@
 
     /* ---- ikatan ---- */
     e.mulai.addEventListener('click', mulai);
+    e.kodePb.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') cariPb(e.kodePb.value); });
+    root.querySelector('[data-pb-cari]').addEventListener('click', function () { cariPb(e.kodePb.value); });
+    root.querySelector('[data-pb-kamera]').addEventListener('click', mulaiKamera);
+    e.hewanPb.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-pb-pilih]'); if (b && !nonaktif(b)) mulaiPb(b.dataset.pbPilih);
+    });
+    e.btnSrt.addEventListener('click', buatSertifikat);
+    e.grid.addEventListener('click', function (ev) {
+      if (!sesi || !sesi.pb || ev.target.closest('[data-retry]')) return;
+      var p = ev.target.closest('.photo'); if (p && p.dataset.foto) pilihFoto(parseInt(p.dataset.foto, 10));
+    });
     e.nama.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') mulai(); });
     e.btnSelesai.addEventListener('click', bukaDialog);
     e.dialog.addEventListener('click', function (ev) {
@@ -607,6 +734,14 @@
         var t = foto.find(function (x) { return x.id === d.foto.id; });
         if (t) t.status = d.foto.status; else muatUlangFoto();
         render();
+      });
+    });
+    ['sertifikat_mulai', 'sertifikat_siap', 'sertifikat_uploaded', 'sertifikat_tertunda', 'sertifikat_tercatat', 'sertifikat_gagal'].forEach(function (j) {
+      aliran.on(j, function (d) {
+        if (!sesi || d.session_id !== sesi.id) return;
+        srtTerakhir = d.sertifikat; gambarSertifikat(d.sertifikat);
+        if (j === 'sertifikat_uploaded') toast('Sertifikat sudah di Drive.', 'ok');
+        if (j === 'sertifikat_gagal') toast('Sertifikat gagal dibuat.', 'bad');
       });
     });
     aliran.on('sesi_drive_terpasang', function (d) { if (milikSesi(d)) { pasangSesi(d.sesi); render(); } });

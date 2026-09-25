@@ -75,7 +75,35 @@
         </div>
 
         <div class="split">
-          <div class="card card-hero">
+          <div class="card card-hero" data-kartu-pb hidden>
+            <span class="section-label">Pet Blessing</span>
+            <h2 class="h1">Scan QR pendaftaran</h2>
+            <p class="body muted" style="margin-top:8px">Arahkan QR di HP pemilik ke kamera laptop, atau pakai scanner. Kode 8 huruf dari pesan WhatsApp juga bisa diketik.</p>
+
+            <div style="margin-top:24px">
+              <label class="field-label" for="inputKodePb">QR atau kode pendaftaran</label>
+              <div class="row" style="gap:8px;flex-wrap:nowrap">
+                <input class="input" id="inputKodePb" type="text" placeholder="mis. 3F2A91C4" autocomplete="off" maxlength="64" style="flex:1">
+                <button class="btn" type="button" data-pb-cari data-butuh-server>Cari</button>
+              </div>
+              <p class="field-hint" data-pb-hint aria-live="polite"></p>
+            </div>
+
+            <div data-pb-kamera-wrap hidden style="margin-top:12px">
+              <button class="btn btn-sm" type="button" data-pb-kamera>Scan dengan kamera laptop</button>
+              <video data-pb-video playsinline muted hidden style="margin-top:12px;width:100%;max-height:260px;border-radius:12px;background:#000;object-fit:cover"></video>
+            </div>
+
+            <div data-pb-hasil hidden style="margin-top:20px">
+              <div class="section-label" style="margin-bottom:4px" data-pb-nomor></div>
+              <h3 class="h2" data-pb-pemilik></h3>
+              <p class="small muted" style="margin:6px 0 12px">Tap hewan yang akan difoto sekarang.</p>
+              <div data-pb-hewan style="display:grid;gap:10px"></div>
+            </div>
+            <p class="btn-reason" data-alasan-pb hidden></p>
+          </div>
+
+          <div class="card card-hero" data-kartu-nama>
             <span class="section-label">Sesi baru</span>
             <h2 class="h1">Siapa yang difoto?</h2>
             <p class="body muted" style="margin-top:8px">Nama ini yang dipakai untuk mencari sesi kalau QR-nya hilang.</p>
@@ -169,6 +197,20 @@
             </div>
           </div>
         </div>
+
+        <section class="card" data-kartu-sertifikat hidden>
+          <div class="row-between" style="margin-bottom:8px">
+            <h3 class="h2">Sertifikat</h3>
+            <span class="chip chip-idle" data-chip-sertifikat><span class="dot dot-idle"></span> Belum dibuat</span>
+          </div>
+          <p class="body muted" style="margin:0" data-sertifikat-info>Tap foto terbaik di bawah, lalu tekan Buat sertifikat.</p>
+          <div class="row" style="margin-top:14px">
+            <button class="btn btn-primary" type="button" data-buat-sertifikat aria-disabled="true" data-butuh-server>Buat sertifikat</button>
+            <a class="btn btn-sm" data-sertifikat-pdf target="_blank" rel="noopener" hidden>Buka PDF</a>
+            <a class="btn btn-sm btn-quiet" data-sertifikat-drive target="_blank" rel="noopener" hidden>Buka di Drive</a>
+          </div>
+          <img data-sertifikat-img alt="Pratinjau sertifikat" hidden style="margin-top:16px;width:100%;max-width:720px;border-radius:12px;border:1px solid var(--line, #ddd)">
+        </section>
 
         <div class="counters">
           <div class="counter counter-terakhir is-idle" data-kartu-terakhir>

@@ -597,3 +597,10 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 /* Cuplikan di panel operator (iframe ?cermin=1): tanpa penanda status dan
    tanpa jalan keluar — ia gambaran, bukan jendela yang dikendalikan. */
 .is-cermin .guest-status, .is-cermin .guest-exit { display: none; }
+
+/* Mode Pet Blessing: foto yang dipilih untuk sertifikat. */
+.photo.is-pilih { outline: 4px solid var(--accent, #1f6feb); outline-offset: 2px; }
+.photo.is-pilih::after { content: "Dipilih"; position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-sm); background: var(--accent, #1f6feb); color: #fff; }
+[data-sesi-pb] .photo { cursor: pointer; }
+.pb-hewan { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.pb-hewan .small { font-weight: 500; }

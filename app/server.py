@@ -37,7 +37,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from sse_starlette.sse import EventSourceResponse  # noqa: E402
 
-from . import db, drive_client, peristiwa, qr, watcher  # noqa: E402
+from . import db, drive_client, peristiwa, petblessing, qr, sertifikat, watcher  # noqa: E402
 
 VERSI = "1.1.0"
 
@@ -64,6 +64,10 @@ STATUS = {
     "sedang_diupload": 409,
     "berkas_hilang": 410,
     "drive_tidak_siap": 503,
+    "bukan_mode_pb": 404,
+    "pemilik_tidak_dikenal": 404,
+    "data_tidak_cocok": 422,
+    "foto_tidak_cocok": 422,
 }
 
 
@@ -119,7 +123,15 @@ async def tangani_galat_db(request, exc: db.GalatDB):
 
 
 class SesiBaru(BaseModel):
-    guest_name: str = Field(min_length=1, max_length=120)
+    guest_name: str | None = Field(None, max_length=120)
+    # Mode Pet Blessing: nama sesi disusun server dari data pendaftaran,
+    # bukan dari ketikan operator.
+    owner_id: str | None = Field(None, max_length=64)
+    pet_id: str | None = Field(None, max_length=64)
+
+
+class PilihFoto(BaseModel):
+    photo_id: int
 
 
 # --------------------------------------------------------------- Sesi
@@ -130,10 +142,80 @@ def buat_sesi(muatan: SesiBaru):
     """Mulai Sesi. Sesi tercatat seketika; folder Drive, izin, dan QR dipasang
     di latar dan diumumkan lewat peristiwa `sesi_drive_terpasang` — wifi venue
     yang lambat tidak boleh membuat tombol Mulai Sesi menggantung."""
-    sesi = db.buat_sesi(muatan.guest_name)
+    if muatan.pet_id or muatan.owner_id:
+        sesi = _buat_sesi_pb(muatan.owner_id or "", muatan.pet_id or "")
+    else:
+        sesi = db.buat_sesi(muatan.guest_name or "")
     peristiwa.kirim({"jenis": "sesi_mulai", "sesi": sesi})
     watcher.pasang_drive_latar(sesi)
     return sesi
+
+
+def _buat_sesi_pb(owner_id: str, pet_id: str) -> dict:
+    if not petblessing.AKTIF:
+        raise db.GalatDB("Mode Pet Blessing tidak aktif di laptop ini.", "bukan_mode_pb")
+    pemilik = petblessing.pemilik_dari_id(owner_id)
+    hewan = next((h for h in (pemilik or {}).get("hewan", []) if h["id"] == pet_id), None)
+    if not pemilik or not hewan:
+        raise db.GalatDB("Data pemilik atau hewan tidak ditemukan. Scan ulang QR-nya.", "data_tidak_cocok")
+    pb = {"owner_id": pemilik["id"], "pet_id": hewan["id"], "nomor": pemilik["nomor"],
+          "pemilik": pemilik["nama"], "hewan": hewan["nama"], "jenis": hewan["jenis"]}
+    sesi = db.buat_sesi(f"{hewan['nama']} ({pemilik['nama']})", pb)
+    watcher._jadwalkan(petblessing.tulis_hewan, pet_id, {"mcfbooth_session_code": sesi["session_code"]})
+    return sesi
+
+
+# --------------------------------------------------------------- Pet Blessing
+
+
+@app.get("/api/pb/pemilik")
+def pb_pemilik(kode: str = Query(..., min_length=8, max_length=64)):
+    """Isi QR pendaftaran (UUID) atau kode 8 huruf → pemilik + hewannya,
+    ditambah sertifikat yang sudah dibuat di booth ini untuk tiap hewan."""
+    if not petblessing.AKTIF:
+        raise db.GalatDB("Mode Pet Blessing tidak aktif di laptop ini.", "bukan_mode_pb")
+    pemilik, dari_salinan = petblessing.cari_pemilik(kode)
+    if not pemilik:
+        raise db.GalatDB("QR tidak dikenali. Coba scan lagi atau ketik kode 8 hurufnya.",
+                         "pemilik_tidak_dikenal", {"dari_salinan": dari_salinan})
+    sudah = db.sertifikat_per_hewan([h["id"] for h in pemilik["hewan"]])
+    for h in pemilik["hewan"]:
+        h["sertifikat"] = sudah.get(h["id"])
+    return {**pemilik, "dari_salinan": dari_salinan}
+
+
+@app.post("/api/sessions/{sesi_id}/sertifikat", status_code=202)
+def buat_sertifikat(sesi_id: int, muatan: PilihFoto):
+    """Foto pilihan operator → sertifikat. Render dan upload berjalan di latar;
+    hasilnya diumumkan lewat peristiwa sertifikat_siap / _uploaded / _gagal."""
+    sesi = db.ambil_sesi(sesi_id)
+    if not sesi.get("pb"):
+        raise db.GalatDB("Sesi ini bukan sesi Pet Blessing.", "bukan_mode_pb")
+    foto = db.ambil_foto(muatan.photo_id)
+    if not foto or foto["session_id"] != sesi_id:
+        raise db.GalatDB("Foto itu bukan milik sesi ini.", "foto_tidak_cocok")
+    if Path(foto["local_path"]).suffix.lower() not in (".jpg", ".jpeg", ".png", ".tif", ".tiff"):
+        raise db.GalatDB("Pilih foto JPEG. Berkas RAW tidak bisa dipakai untuk sertifikat.", "foto_tidak_cocok")
+    if not Path(foto["local_path"]).exists():
+        raise db.GalatDB("Berkas foto tidak ada lagi di arsip lokal.", "berkas_hilang")
+    return sertifikat.mulai(sesi, foto)
+
+
+@app.get("/api/sessions/{sesi_id}/sertifikat")
+def daftar_sertifikat(sesi_id: int):
+    db.ambil_sesi(sesi_id)
+    return db.sertifikat_sesi(sesi_id)
+
+
+@app.get("/api/sertifikat/{sertifikat_id}/berkas.{jenis}")
+def berkas_sertifikat(sertifikat_id: int, jenis: str):
+    """Pratinjau PNG atau unduh PDF dari salinan lokal."""
+    srt = db.ambil_sertifikat(sertifikat_id)
+    path = srt and srt.get({"png": "png_path", "pdf": "pdf_path"}.get(jenis, "-"))
+    if not path or not Path(path).exists():
+        raise db.GalatDB("Berkas sertifikat belum ada.", "tidak_ada")
+    return FileResponse(path, media_type="image/png" if jenis == "png" else "application/pdf",
+                        filename=Path(path).name)
 
 
 @app.get("/api/sessions")
@@ -381,6 +463,8 @@ def pemeriksaan_awal():
 
     return {
         "versi": VERSI,
+        "mode": "petblessing" if petblessing.AKTIF else "umum",
+        "pb_siap": petblessing.siap(),
         "drive": {
             **st,
             "kuota_total_gb": _gb(info["kuota_total"]) if info else None,

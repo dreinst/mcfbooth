@@ -612,6 +612,9 @@ def _penjaga() -> None:
                         n = _antre_sisa(dipasang)
                         if n:
                             log.info("Penjaga: %d foto sesi %s diantrekan lagi.", n, sesi["session_code"])
+            from . import petblessing, sertifikat
+            if petblessing.AKTIF:
+                sertifikat.susulkan()
         except Exception as e:  # pragma: no cover
             log.exception("Penjaga gagal satu putaran: %s", e)
 

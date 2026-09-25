@@ -265,6 +265,62 @@ foto terakhir", masalahnya di kabel kamera, bukan di upload.
 
 ---
 
+## Mode Pet Blessing (sertifikat otomatis)
+
+Untuk acara Pet Blessing 2026 (Paroki St. Vincentius a Paulo, Malang). Satu sesi foto =
+satu hewan. Dari foto terbaik, aplikasi menyusun sertifikat A4 lalu mengirim PNG dan PDF
+ke Google Drive dan mencatat tautannya di database pendaftaran.
+
+Desain sertifikat tetap dibuat di Figma (file "Pet Blessing 2026", frame sertifikat).
+Figma tidak bisa diotomasi tanpa orang di depannya, jadi desainnya diekspor sekali ke
+`assets/sertifikat/template.png` (area foto transparan, nama dan jenis hewan serta nama
+pemilik dikosongkan). Posisi dan ukuran tulisan ada di `assets/sertifikat/layout.json`,
+diambil dari Figma. Huruf Poppins (lisensi OFL) ada di `assets/fonts/`. Kalau desain di
+Figma berubah, ekspor ulang template dan sesuaikan `layout.json`.
+
+### Menyalakan
+
+Tambahkan ke `.env`:
+
+```
+MCF_MODE=petblessing
+PETBLESSING_API_URL=https://petblessing-api.187.53.129.205.sslip.io
+PETBLESSING_BOOTH_TOKEN=<JWT peran booth_worker, minta ke admin>
+```
+
+Peran `booth_worker` dibuat oleh migrasi `vps-db/init/18-booth-worker.sql` di repo
+petblessings. Token itu hanya bisa membaca nama pemilik, nomor antrean, dan data hewan,
+lalu menulis dua kolom: `pets.mcfbooth_session_code` dan `pets.certificate_url`. Nomor HP,
+donasi, dan bukti transfer tidak terlihat dari booth.
+
+Tanpa `MCF_MODE`, aplikasi berjalan seperti photobooth biasa.
+
+### Per hewan
+
+1. **Scan QR pendaftaran** di HP pemilik: lewat kamera laptop (tombol Scan dengan kamera
+   laptop, hanya tampil di browser yang punya pemindai QR bawaan), scanner USB, atau
+   ketik kode 8 huruf dari pesan WhatsApp lalu Enter.
+2. **Tap hewan** yang akan difoto. Hewan yang sudah punya sertifikat diberi keterangan.
+3. **Motret seperti biasa.**
+4. **Tap foto terbaik** (bingkai biru "Dipilih"), lalu **Buat sertifikat**. Pratinjau
+   muncul beberapa detik kemudian. Kalau kurang pas, pilih foto lain dan buat ulang.
+5. **Tekan Selesai.** Setelah itu, daftar hewan milik pemilik yang sama tampil lagi, jadi
+   hewan berikutnya tidak perlu scan ulang.
+
+Sertifikat tersimpan di `local_archive/_sertifikat/` dengan nama
+`<nomor antrean>_<hewan>_<pemilik>.png/.pdf`, lalu diupload ke Drive
+`MCF Photobooth/3. Sertifikat/`. Tiap berkas dibuka untuk siapa saja yang punya tautannya.
+Tautan PDF dicatat di data pendaftaran.
+
+Kalau wifi putus: sertifikat tetap dibuat di laptop, dan upload serta pencatatannya
+disusulkan penjaga latar begitu tersambung. Pencarian QR memakai salinan daftar pemilik
+terakhir yang tersimpan di laptop.
+
+Foto dipotong otomatis memenuhi bingkai (bagian tengah dipertahankan). Posisikan hewan di
+tengah frame kamera. Bingkai sertifikat tegak (1205 × 1795), jadi foto portrait paling pas.
+
+---
+
 ## Kalau ada masalah
 
 **Wifi venue mati.** Terus motret. Foto tetap tersimpan di kartu SD dan di `local_archive/`.
@@ -366,5 +422,10 @@ sesi, tombol Uji ulang koneksi di Pengaturan, penomoran urutan foto di grid oper
 Ditolak dari paket sumber dan dicatat alasannya di `design.md` §11.2: paket cetak dan
 printer, kamera Canon/RAW `.CR3`, nomor sesi generik, label paket/tier tamu, klaim ZIP/4K/
 kedaluwarsa di layar tamu, saklar manual keadaan layar tamu, dan label berbahasa Inggris.
+
+**v1.3** (25 Sep 2026): mode Pet Blessing. Scan QR pendaftaran, satu sesi per hewan,
+pilih foto terbaik, sertifikat PNG + PDF A4 dari template Figma, upload ke Drive
+"3. Sertifikat", tautan dicatat di database pendaftaran, penjaga latar menyusulkan yang
+tertunda. Suite uji baru `uji/uji_sertifikat.py`.
 
 **v1.0.0** — Drive, watcher, QR, SSE, integrasi awal frontend.

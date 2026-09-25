@@ -8,6 +8,7 @@ menerjemahkan galat di sini jadi kode status.
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -61,7 +62,36 @@ CREATE INDEX IF NOT EXISTS idx_sessions_guest  ON sessions (guest_name);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions (status);
 CREATE INDEX IF NOT EXISTS idx_photos_session  ON photo_uploads (session_id);
 CREATE INDEX IF NOT EXISTS idx_photos_path     ON photo_uploads (local_path);
+
+/* Mode Pet Blessing: satu baris per sertifikat yang dibuat dari foto pilihan
+   operator. status: 'render' (sedang dibuat), 'menunggu' (berkas lokal ada,
+   belum di Drive), 'uploaded', 'failed' (render gagal). `tercatat` = tautan
+   sudah ditulis ke database pendaftaran. */
+CREATE TABLE IF NOT EXISTS sertifikat (
+    id            INTEGER PRIMARY KEY,
+    session_id    INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    photo_id      INTEGER NOT NULL REFERENCES photo_uploads(id) ON DELETE CASCADE,
+    nama_berkas   TEXT    NOT NULL,
+    png_path      TEXT,
+    pdf_path      TEXT,
+    drive_png_id  TEXT,
+    drive_pdf_id  TEXT,
+    link_png      TEXT,
+    link_pdf      TEXT,
+    status        TEXT    NOT NULL CHECK (status IN ('render', 'menunggu', 'uploaded', 'failed')),
+    tercatat      INTEGER NOT NULL DEFAULT 0,
+    pesan         TEXT,
+    created_at    TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sertifikat_sesi ON sertifikat (session_id);
 """
+
+# Kolom yang ditambahkan setelah skema awal. CREATE TABLE IF NOT EXISTS tidak
+# menyentuh tabel lama, jadi sessions.db dari acara sebelumnya diberi kolomnya
+# di sini.
+KOLOM_TAMBAHAN = {
+    "sessions": {"pb_data": "TEXT"},
+}
 
 
 class GalatDB(Exception):
@@ -112,6 +142,11 @@ def siapkan() -> None:
     BERKAS_DB.parent.mkdir(parents=True, exist_ok=True)
     with koneksi() as conn:
         conn.executescript(SKEMA)
+        for tabel, kolom in KOLOM_TAMBAHAN.items():
+            ada = {b["name"] for b in conn.execute(f"PRAGMA table_info({tabel})")}
+            for nama, tipe in kolom.items():
+                if nama not in ada:
+                    conn.execute(f"ALTER TABLE {tabel} ADD COLUMN {nama} {tipe}")
 
 
 # --------------------------------------------------------------- pengaturan
@@ -201,6 +236,7 @@ def _bentuk(conn: sqlite3.Connection, baris: sqlite3.Row) -> dict:
     kepercayaan operator: kalau tethering berhenti mengirim, angka inilah yang
     membuka rahasianya."""
     d = dict(baris)
+    d["pb"] = json.loads(d.pop("pb_data")) if d.get("pb_data") else None
     d["foto"] = _hitungan_foto(conn, baris["id"])
     terakhir = conn.execute(
         "SELECT created_at FROM photo_uploads WHERE session_id = ? "
@@ -208,10 +244,16 @@ def _bentuk(conn: sqlite3.Connection, baris: sqlite3.Row) -> dict:
         (baris["id"],),
     ).fetchone()
     d["foto_terakhir_at"] = terakhir["created_at"] if terakhir else None
+    if d["pb"] is not None:
+        srt = conn.execute(
+            "SELECT id, status, link_pdf, link_png, tercatat FROM sertifikat "
+            "WHERE session_id = ? ORDER BY id DESC LIMIT 1", (baris["id"],),
+        ).fetchone()
+        d["sertifikat"] = dict(srt) if srt else None
     return d
 
 
-def buat_sesi(nama_tamu: str) -> dict:
+def buat_sesi(nama_tamu: str, pb_data: dict | None = None) -> dict:
     nama_tamu = (nama_tamu or "").strip()
     if not nama_tamu:
         raise GalatDB("Nama tamu tidak boleh kosong.", "nama_kosong")
@@ -242,9 +284,10 @@ def buat_sesi(nama_tamu: str) -> dict:
 
         kode = _kode_bebas(conn, kode_sesi(nama_tamu))
         cur = conn.execute(
-            """INSERT INTO sessions (session_code, guest_name, status, started_at)
-               VALUES (?, ?, 'active', ?)""",
-            (kode, nama_tamu, sekarang()),
+            """INSERT INTO sessions (session_code, guest_name, status, started_at, pb_data)
+               VALUES (?, ?, 'active', ?, ?)""",
+            (kode, nama_tamu, sekarang(),
+             json.dumps(pb_data, ensure_ascii=False) if pb_data else None),
         )
         # Sesi baru selalu mengambil alih monitor tamu: QR yang dipaksa tampil
         # dari Riwayat, atau sambutan yang dipaksa, tidak boleh bertahan di
@@ -540,3 +583,68 @@ def nama_serupa_hari_ini(nama: str) -> int:
             r"SELECT COUNT(*) AS n FROM sessions WHERE lower(session_code) LIKE ? ESCAPE '\'",
             (f"{pola.lower()}%",),
         ).fetchone()["n"]
+
+
+# ------------------------------------------------------------- sertifikat
+
+
+def buat_sertifikat(session_id: int, photo_id: int, nama_berkas: str) -> dict:
+    with koneksi() as conn:
+        cur = conn.execute(
+            """INSERT INTO sertifikat (session_id, photo_id, nama_berkas, status, created_at)
+               VALUES (?, ?, ?, 'render', ?)""",
+            (session_id, photo_id, nama_berkas, sekarang()),
+        )
+        return dict(conn.execute("SELECT * FROM sertifikat WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def ubah_sertifikat(sertifikat_id: int, **kolom) -> dict | None:
+    boleh = {"png_path", "pdf_path", "drive_png_id", "drive_pdf_id", "link_png",
+             "link_pdf", "status", "tercatat", "pesan"}
+    kolom = {k: v for k, v in kolom.items() if k in boleh}
+    with koneksi() as conn:
+        if kolom:
+            conn.execute(
+                f"UPDATE sertifikat SET {', '.join(f'{k} = ?' for k in kolom)} WHERE id = ?",
+                (*kolom.values(), sertifikat_id),
+            )
+        baris = conn.execute("SELECT * FROM sertifikat WHERE id = ?", (sertifikat_id,)).fetchone()
+        return dict(baris) if baris else None
+
+
+def ambil_sertifikat(sertifikat_id: int) -> dict | None:
+    return ubah_sertifikat(sertifikat_id)
+
+
+def sertifikat_sesi(session_id: int) -> list[dict]:
+    with koneksi() as conn:
+        return [dict(b) for b in conn.execute(
+            "SELECT * FROM sertifikat WHERE session_id = ? ORDER BY id", (session_id,)
+        ).fetchall()]
+
+
+def sertifikat_tertunda() -> list[dict]:
+    """Sudah dirender tapi belum sampai Drive, atau sudah di Drive tapi
+    tautannya belum tercatat di database pendaftaran."""
+    with koneksi() as conn:
+        return [dict(b) for b in conn.execute(
+            "SELECT * FROM sertifikat WHERE status = 'menunggu' "
+            "OR (status = 'uploaded' AND tercatat = 0) ORDER BY id"
+        ).fetchall()]
+
+
+def sertifikat_per_hewan(pet_ids: list[str]) -> dict[str, dict]:
+    """Sertifikat terakhir per hewan, supaya operator tahu hewan mana yang
+    sudah selesai difoto ketika pemilik yang sama kembali."""
+    if not pet_ids:
+        return {}
+    hasil: dict[str, dict] = {}
+    with koneksi() as conn:
+        for b in conn.execute(
+            "SELECT s.pb_data, t.id, t.status, t.link_pdf FROM sertifikat t "
+            "JOIN sessions s ON s.id = t.session_id WHERE s.pb_data IS NOT NULL ORDER BY t.id"
+        ):
+            pet = json.loads(b["pb_data"]).get("pet_id")
+            if pet in pet_ids:
+                hasil[pet] = {"id": b["id"], "status": b["status"], "link_pdf": b["link_pdf"]}
+    return hasil
