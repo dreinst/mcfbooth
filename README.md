@@ -284,9 +284,22 @@ Tambahkan ke `.env`:
 
 ```
 MCF_MODE=petblessing
-PETBLESSING_API_URL=https://petblessing-api.187.53.129.205.sslip.io
+PETBLESSING_API_URL=http://<IP Mac server lokal>:8080/rest
 PETBLESSING_BOOTH_TOKEN=<JWT peran booth_worker, minta ke admin>
+DRIVE_FOLDER_RAW_ID=1sAZVYbKXhEhs_-QQCWcKIaQPdVAeQeNH
+DRIVE_FOLDER_SERTIFIKAT_ID=1qc76GuiSbHvmZMnUuXt4cRJoLLsyGerq
 ```
+
+Hari H, API menunjuk server lokal di Mac (lihat `lokal/` di repo petblessings); VPS
+(`https://petblessing-api.187.53.129.205.sslip.io`) hanya cadangan. Booth memakai nomor
+kedatangan dari reg ulang dan menolak peserta yang belum reg ulang.
+
+Dua ID folder di atas adalah folder panitia di Drive "Hari H": foto masuk
+`Raw Photo Pet Blessings/027 Nama Pemilik/027A Nama Hewan/`, sertifikat masuk
+`Sertifikat Pet Blessing/027 Nama Pemilik/027A_Hewan_Pemilik.pdf`. Karena folder itu bukan
+buatan aplikasi, booth meminta izin Drive penuh saat ID diisi: login Google di Pengaturan
+harus diulang, memakai akun yang punya akses edit ke folder "Hari H". Tanpa dua ID itu,
+semuanya masuk folder aplikasi `MCF Photobooth/2. Result/027 Nama Pemilik/027A Nama Hewan/`.
 
 Peran `booth_worker` dibuat oleh migrasi `vps-db/init/18-booth-worker.sql` di repo
 petblessings. Token itu hanya bisa membaca nama pemilik, nomor antrean, dan data hewan,

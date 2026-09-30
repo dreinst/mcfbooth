@@ -163,7 +163,11 @@ def _upload(sertifikat_id: int) -> None:
         srt = db.ambil_sertifikat(sertifikat_id)
         # Sertifikat masuk folder hewannya (di dalam folder pemilik). Kalau
         # folder sesi belum terpasang (Drive sempat putus), tunggu disusulkan.
-        folder = db.ambil_sesi(srt["session_id"]).get("drive_folder_id")
+        sesi = db.ambil_sesi(srt["session_id"])
+        folder = sesi.get("drive_folder_id")
+        if folder and srt["status"] == "menunggu" and drive_client.terhubung():
+            pb = sesi["pb"]
+            folder = drive_client.folder_sertifikat(f"{int(pb['nomor']):03d} {pb['pemilik']}", folder)
         if srt["status"] == "menunggu" and folder and drive_client.terhubung():
             ulang = bool(srt.get("pesan"))
             png = srt["drive_png_id"] and {"id": srt["drive_png_id"], "link": srt["link_png"]} \

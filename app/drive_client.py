@@ -45,7 +45,15 @@ from .jalur import AKAR, env_bool, env_float, path_env
 
 log = logging.getLogger(__name__)
 
-SCOPES = ["https://www.googleapis.com/auth/drive.file"]
+# Pet Blessing hari-H: foto dan sertifikat ditulis ke folder Drive milik
+# panitia ("Raw Photo Pet Blessings" dan "Sertifikat Pet Blessing"). Folder yang
+# bukan buatan aplikasi hanya bisa ditulisi dengan scope drive penuh, jadi scope
+# itu dipakai HANYA kalau ID folder ini diisi. Setelah diisi, login Google di
+# Pengaturan harus diulang (token lama ber-scope drive.file).
+FOLDER_RAW_ID = os.environ.get("DRIVE_FOLDER_RAW_ID", "").strip()
+FOLDER_SERTIFIKAT_ID = os.environ.get("DRIVE_FOLDER_SERTIFIKAT_ID", "").strip()
+SCOPES = ["https://www.googleapis.com/auth/drive" if (FOLDER_RAW_ID or FOLDER_SERTIFIKAT_ID)
+          else "https://www.googleapis.com/auth/drive.file"]
 CRED_PATH = path_env("GOOGLE_CREDENTIALS", AKAR / "credentials.json")
 TOKEN_PATH = path_env("GOOGLE_TOKEN", AKAR / "token.json")
 
@@ -139,7 +147,9 @@ class _DrivePalsu:
                     if self.folder.get(fid, {}).get("parent") == "palsu-result"}
             def jalur(fid: str) -> str:
                 f = self.folder.get(fid)
-                return (jalur(f["parent"]) + "/" if f and f.get("parent") in self.folder else "") + (f["nama"] if f else fid)
+                if not f:
+                    return fid
+                return (jalur(f["parent"]) + "/" if f.get("parent") else "") + f["nama"]
             return {
                 "pohon": sorted(jalur(fid) + "/" + n for fid, ns in self.berkas.items() for n in ns),
                 "folder_sesi_dibuat": self.n_folder_sesi,
@@ -597,7 +607,7 @@ def _folder_pemilik(svc, parent: str, nama: str) -> str | None:
     """Folder pengelompokan per pemilik di bawah '2. Result'. Dicari dulu
     (cache di pengaturan, lalu Drive) supaya hewan kedua pemilik yang sama
     masuk folder yang sama, tidak membuat folder kembar."""
-    kunci_cache = "drive_pemilik:" + nama
+    kunci_cache = f"drive_pemilik:{parent}:{nama}"
     with _kunci_pemilik:
         cached = db.ambil_pengaturan(kunci_cache)
         if cached and (PALSU or _folder_bisa_diakses(svc, cached)):
@@ -621,7 +631,7 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
     if PALSU:
         if _palsu.mati():
             return None
-        parent = _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
+        parent = (induk and FOLDER_RAW_ID) or _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
         if induk:
             parent = _folder_pemilik(None, parent, induk)
         f = _palsu.buat_folder(nama_folder, parent)
@@ -633,7 +643,7 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
         svc = _svc()
         if svc is None:
             return None
-        parent = _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
+        parent = (induk and FOLDER_RAW_ID) or _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
         if not parent:
             akar = folder_induk()
             parent = akar["id"] if akar else None
@@ -661,6 +671,19 @@ def upload_qr(qr_path: str, nama_file: str) -> dict | None:
         return upload_foto(qr_path, parent, nama_file)
     except Exception as e:
         log.error("Gagal upload QR ke Drive: %s", e)
+        return None
+
+
+def folder_sertifikat(nama_pemilik: str, folder_sesi: str | None) -> str | None:
+    """Tujuan sertifikat Pet Blessing: folder pemilik di dalam folder
+    Sertifikat panitia kalau DRIVE_FOLDER_SERTIFIKAT_ID diisi, selain itu
+    folder hewan (folder sesi) itu sendiri."""
+    if not FOLDER_SERTIFIKAT_ID:
+        return folder_sesi
+    try:
+        return _folder_pemilik(None if PALSU else _svc(), FOLDER_SERTIFIKAT_ID, nama_pemilik)
+    except Exception as e:
+        log.error("Gagal menyiapkan folder sertifikat '%s': %s", nama_pemilik, str(e)[:200])
         return None
 
 
