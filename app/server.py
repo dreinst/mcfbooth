@@ -67,6 +67,7 @@ STATUS = {
     "bukan_mode_pb": 404,
     "pemilik_tidak_dikenal": 404,
     "data_tidak_cocok": 422,
+    "belum_reg_ulang": 409,
     "foto_tidak_cocok": 422,
 }
 
@@ -158,9 +159,13 @@ def _buat_sesi_pb(owner_id: str, pet_id: str) -> dict:
     hewan = next((h for h in (pemilik or {}).get("hewan", []) if h["id"] == pet_id), None)
     if not pemilik or not hewan:
         raise db.GalatDB("Data pemilik atau hewan tidak ditemukan. Scan ulang QR-nya.", "data_tidak_cocok")
+    if not pemilik.get("nomor"):
+        raise db.GalatDB("Peserta ini belum reg ulang, jadi belum punya nomor kedatangan. "
+                         "Arahkan ke meja reg ulang dulu.", "belum_reg_ulang")
     pb = {"owner_id": pemilik["id"], "pet_id": hewan["id"], "nomor": pemilik["nomor"],
+          "nomor_daftar": pemilik.get("nomor_daftar"), "huruf": hewan["huruf"], "label": hewan["label"],
           "pemilik": pemilik["nama"], "hewan": hewan["nama"], "jenis": hewan["jenis"]}
-    sesi = db.buat_sesi(f"{hewan['nama']} ({pemilik['nama']})", pb)
+    sesi = db.buat_sesi(f"{hewan['label']} {hewan['nama']} ({pemilik['nama']})", pb)
     watcher._jadwalkan(petblessing.tulis_hewan, pet_id, {"mcfbooth_session_code": sesi["session_code"]})
     return sesi
 

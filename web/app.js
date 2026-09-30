@@ -570,14 +570,14 @@
         pemilikPb = o; e.kodePb.value = '';
         e.hintPb.className = o.dari_salinan ? 'field-hint is-wait' : 'field-hint';
         e.hintPb.textContent = o.dari_salinan ? 'Internet putus: data diambil dari salinan terakhir di laptop.' : '';
-        e.nomorPb.textContent = 'Nomor antrean ' + o.nomor + (o.uji ? ' · DATA UJI' : '');
+        e.nomorPb.textContent = (o.nomor ? 'Nomor kedatangan ' + o.nomor : 'BELUM REG ULANG, arahkan ke meja reg ulang dulu') + (o.uji ? ' · DATA UJI' : '');
         e.pemilikPb.textContent = o.nama;
         e.hewanPb.textContent = '';
         o.hewan.forEach(function (h) {
           var srt = h.sertifikat;
           var ket = !srt ? 'belum difoto' : srt.status === 'uploaded' ? 'sertifikat sudah di Drive' : srt.status === 'failed' ? 'sertifikat gagal dibuat' : 'sertifikat menunggu upload';
           var b = el('button', { class: 'btn pb-hewan' + (srt ? '' : ' btn-primary'), type: 'button', 'data-pb-pilih': h.id }, [
-            el('span', {}, [el('strong', { text: h.nama }), document.createTextNode(' · ' + h.jenis)]),
+            el('span', {}, [el('strong', { text: (h.label ? h.label + ' ' : '') + h.nama }), document.createTextNode(' · ' + h.jenis)]),
             el('span', { class: 'small', text: ket })
           ]);
           e.hewanPb.appendChild(b);

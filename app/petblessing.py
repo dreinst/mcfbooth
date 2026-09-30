@@ -6,6 +6,11 @@ seperti biasa dan modul ini tidak pernah memanggil jaringan.
 Yang dilakukan:
 * Mencari pemilik dari isi QR pendaftaran (UUID polos) atau kode 8 huruf yang
   tercetak di pesan WhatsApp, beserta daftar hewannya.
+* Nomor yang dipakai booth adalah NOMOR KEDATANGAN dari reg ulang
+  (checkins.arrival_number) plus huruf stiker hewan (pets.sticker_letter),
+  misalnya 27A. Nomor pendaftaran (queue_number) hanya disimpan sebagai info.
+  Hari-H, PETBLESSING_API_URL menunjuk server lokal di Mac
+  (http://<ip-mac>:8080/rest); VPS hanya cadangan.
 * Menulis balik `pets.mcfbooth_session_code` dan `pets.certificate_url`.
 
 Daftar pemilik disalin utuh ke tabel `pengaturan` tiap kali berhasil diambil,
@@ -35,7 +40,8 @@ TIMEOUT = env_float("PETBLESSING_TIMEOUT", 6)
 
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 _KUNCI_CACHE = "pb_pemilik_cache"
-_PILIHAN = "select=id,queue_number,name,is_test,pets(id,name,type)"
+_PILIHAN = ("select=id,queue_number,name,is_test,pets(id,name,type,sticker_letter,hadir),"
+            "checkins(post,arrival_number)")
 
 
 def siap() -> bool:
@@ -56,13 +62,23 @@ def _minta(metode: str, jalur: str, badan: dict | None = None) -> object:
 
 
 def _bentuk(o: dict) -> dict:
-    hewan = sorted(o.get("pets") or [], key=lambda p: (p.get("name") or "").lower())
+    hewan = sorted(o.get("pets") or [], key=lambda p: (p.get("sticker_letter") or "", (p.get("name") or "").lower()))
+    reg = next((c for c in o.get("checkins") or [] if c.get("post") == "reg_ulang"), None)
+    nomor = reg and reg.get("arrival_number")
     return {
-        "id": o["id"], "nomor": o.get("queue_number"), "nama": (o.get("name") or "").strip(),
-        "uji": bool(o.get("is_test")),
+        "id": o["id"], "nomor": nomor, "nomor_daftar": o.get("queue_number"),
+        "nama": (o.get("name") or "").strip(), "uji": bool(o.get("is_test")),
+        # Hewan yang ditandai tidak dibawa saat reg ulang tidak ditawarkan di booth.
         "hewan": [{"id": p["id"], "nama": (p.get("name") or "").strip(),
-                   "jenis": (p.get("type") or "").strip()} for p in hewan],
+                   "jenis": (p.get("type") or "").strip(), "huruf": p.get("sticker_letter") or "",
+                   "label": label(nomor, p.get("sticker_letter")) if nomor else ""}
+                  for p in hewan if p.get("hadir") is not False],
     }
+
+
+def label(nomor: int, huruf: str | None) -> str:
+    """Label stiker, tiga digit supaya urut di Drive: 27 + A -> 027A."""
+    return f"{int(nomor):03d}{huruf or ''}"
 
 
 def segarkan() -> list[dict] | None:

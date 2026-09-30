@@ -240,7 +240,14 @@ def pasang_drive(sesi: dict) -> dict | None:
         if sesi.get("drive_folder_id"):
             return pastikan_qr(sesi)
 
-        folder = drive_client.buat_folder_sesi(sesi["session_code"])
+        pb = sesi.get("pb")
+        if pb and pb.get("label"):
+            # Pet Blessing: "027 Nama Pemilik" / "027A Nama Hewan", supaya
+            # hasil foto dan sertifikat bisa dicek per pemilik di Drive.
+            folder = drive_client.buat_folder_sesi(
+                f"{pb['label']} {pb['hewan']}", induk=f"{int(pb['nomor']):03d} {pb['pemilik']}")
+        else:
+            folder = drive_client.buat_folder_sesi(sesi["session_code"])
         if not folder:
             return None
         qr_path = qr.buat_qr(folder["link"], sesi["session_code"])

@@ -137,7 +137,11 @@ class _DrivePalsu:
         with self.kunci:
             sesi = {fid: list(n) for fid, n in self.berkas.items()
                     if self.folder.get(fid, {}).get("parent") == "palsu-result"}
+            def jalur(fid: str) -> str:
+                f = self.folder.get(fid)
+                return (jalur(f["parent"]) + "/" if f and f.get("parent") in self.folder else "") + (f["nama"] if f else fid)
             return {
+                "pohon": sorted(jalur(fid) + "/" + n for fid, ns in self.berkas.items() for n in ns),
                 "folder_sesi_dibuat": self.n_folder_sesi,
                 "upload_sukses": self.n_upload,
                 "upload_gagal": self.n_upload_gagal,
@@ -586,9 +590,31 @@ def pastikan_struktur() -> dict | None:
     }
 
 
-def buat_folder_sesi(nama_folder: str) -> dict | None:
+_kunci_pemilik = threading.Lock()
+
+
+def _folder_pemilik(svc, parent: str, nama: str) -> str | None:
+    """Folder pengelompokan per pemilik di bawah '2. Result'. Dicari dulu
+    (cache di pengaturan, lalu Drive) supaya hewan kedua pemilik yang sama
+    masuk folder yang sama, tidak membuat folder kembar."""
+    kunci_cache = "drive_pemilik:" + nama
+    with _kunci_pemilik:
+        cached = db.ambil_pengaturan(kunci_cache)
+        if cached and (PALSU or _folder_bisa_diakses(svc, cached)):
+            return cached
+        if PALSU:
+            fid = next((k for k, f in _palsu.folder.items() if f["nama"] == nama and f["parent"] == parent), None) \
+                or _palsu.buat_folder(nama, parent)["id"]
+        else:
+            fid = _cari_subfolder(svc, parent, nama) or _buat_folder(svc, nama, parent)["id"]
+        db.simpan_pengaturan(kunci_cache, fid)
+        return fid
+
+
+def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
     """Folder sesi di bawah '2. Result' (atau langsung di bawah induk kalau
-    nama subfolder dikosongkan), izin anyone-with-link viewer.
+    nama subfolder dikosongkan), izin anyone-with-link viewer. `induk` =
+    nama folder pengelompokan (Pet Blessing: satu folder per pemilik).
 
     Returns {"id", "link"} atau None kalau gagal. Pemanggil (watcher) yang
     menjamin fungsi ini dipanggil paling banyak sekali per sesi."""
@@ -596,6 +622,8 @@ def buat_folder_sesi(nama_folder: str) -> dict | None:
         if _palsu.mati():
             return None
         parent = _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
+        if induk:
+            parent = _folder_pemilik(None, parent, induk)
         f = _palsu.buat_folder(nama_folder, parent)
         with _palsu.kunci:
             _palsu.n_folder_sesi += 1
@@ -607,8 +635,10 @@ def buat_folder_sesi(nama_folder: str) -> dict | None:
             return None
         parent = _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
         if not parent:
-            induk = folder_induk()
-            parent = induk["id"] if induk else None
+            akar = folder_induk()
+            parent = akar["id"] if akar else None
+        if induk:
+            parent = _folder_pemilik(svc, parent, induk)
 
         folder = _buat_folder(svc, nama_folder, parent)
         folder_id, folder_link = folder["id"], folder["webViewLink"]
@@ -634,11 +664,11 @@ def upload_qr(qr_path: str, nama_file: str) -> dict | None:
         return None
 
 
-def upload_sertifikat(path_lokal: str, cek_dulu: bool = False) -> dict | None:
-    """Upload sertifikat Pet Blessing ke subfolder '3. Sertifikat' lalu buka
-    izin baca lewat tautan per berkas (bukan per folder), supaya tautan satu
-    sertifikat tidak membuka sertifikat pemilik lain."""
-    parent = _subfolder(NAMA_FOLDER_SERTIFIKAT, "drive_sertifikat_id")
+def upload_sertifikat(path_lokal: str, cek_dulu: bool = False, folder_id: str | None = None) -> dict | None:
+    """Upload sertifikat Pet Blessing ke folder hewannya (`folder_id`, di
+    dalam folder pemilik) atau, tanpa folder_id, ke subfolder '3. Sertifikat'.
+    Izin baca dibuka per berkas."""
+    parent = folder_id or _subfolder(NAMA_FOLDER_SERTIFIKAT, "drive_sertifikat_id")
     if not parent:
         return None
     hasil = upload_foto(path_lokal, parent, cek_dulu=cek_dulu)

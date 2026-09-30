@@ -128,7 +128,8 @@ def _kirim(jenis: str, srt: dict) -> None:
 def mulai(sesi: dict, foto: dict) -> dict:
     """Catat sertifikat baru dan render di latar. Validasi di pemanggil."""
     pb = sesi["pb"]
-    dasar = f"{int(pb.get('nomor') or 0):03d}_{db._slug(pb['hewan'])}_{db._slug(pb['pemilik'])}"
+    awal = pb.get("label") or f"{int(pb.get('nomor') or 0):03d}"
+    dasar = f"{awal}_{db._slug(pb['hewan'])}_{db._slug(pb['pemilik'])}"
     ke = len(db.sertifikat_sesi(sesi["id"])) + 1
     srt = db.buat_sertifikat(sesi["id"], foto["id"], dasar if ke == 1 else f"{dasar}_{ke}")
     _kirim("sertifikat_mulai", srt)
@@ -160,12 +161,15 @@ def _upload(sertifikat_id: int) -> None:
         _sedang.add(sertifikat_id)
     try:
         srt = db.ambil_sertifikat(sertifikat_id)
-        if srt["status"] == "menunggu" and drive_client.terhubung():
+        # Sertifikat masuk folder hewannya (di dalam folder pemilik). Kalau
+        # folder sesi belum terpasang (Drive sempat putus), tunggu disusulkan.
+        folder = db.ambil_sesi(srt["session_id"]).get("drive_folder_id")
+        if srt["status"] == "menunggu" and folder and drive_client.terhubung():
             ulang = bool(srt.get("pesan"))
             png = srt["drive_png_id"] and {"id": srt["drive_png_id"], "link": srt["link_png"]} \
-                or drive_client.upload_sertifikat(srt["png_path"], cek_dulu=ulang)
+                or drive_client.upload_sertifikat(srt["png_path"], cek_dulu=ulang, folder_id=folder)
             pdf = png and (srt["drive_pdf_id"] and {"id": srt["drive_pdf_id"], "link": srt["link_pdf"]}
-                           or drive_client.upload_sertifikat(srt["pdf_path"], cek_dulu=ulang))
+                           or drive_client.upload_sertifikat(srt["pdf_path"], cek_dulu=ulang, folder_id=folder))
             if png and pdf:
                 srt = db.ubah_sertifikat(sertifikat_id, drive_png_id=png["id"], link_png=png["link"],
                                          drive_pdf_id=pdf["id"], link_pdf=pdf["link"],

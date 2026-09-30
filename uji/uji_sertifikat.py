@@ -1,5 +1,5 @@
 """Verifikasi mode Pet Blessing: scan QR → sesi per hewan → foto pilihan →
-sertifikat PNG+PDF → Drive "3. Sertifikat" → tautan ke database pendaftaran.
+sertifikat PNG+PDF → Drive "2. Result/027 Pemilik/027A Hewan" → tautan ke database pendaftaran.
 
 Database pendaftaran (PostgREST) digantikan server tiruan di proses ini, Drive
 memakai tiruan MCF_DRIVE_PALSU. Tidak ada jaringan yang disentuh.
@@ -61,10 +61,14 @@ class PostgRESTTiruan(BaseHTTPRequestHandler):
         if self.path.startswith("/owners?"):
             self._jawab(200, [
                 {"id": OWNER, "queue_number": 88, "name": "Felicia Cynthia", "is_test": False,
-                 "pets": [{"id": PET_B, "name": "Mochi", "type": "Kucing"},
-                          {"id": PET_A, "name": "Candy", "type": "Anjing"}]},
+                 "checkins": [{"post": "reg_ulang", "arrival_number": 27}],
+                 "pets": [{"id": PET_B, "name": "Mochi", "type": "Kucing", "sticker_letter": "B", "hadir": True},
+                          {"id": PET_A, "name": "Candy", "type": "Anjing", "sticker_letter": "A", "hadir": True},
+                          {"id": "9b000000-3333-4a2b-8c3d-000000000003", "name": "Tidakikut", "type": "Kucing",
+                           "sticker_letter": "C", "hadir": False}]},
                 {"id": "9b000000-2222-4a2b-8c3d-000000000002", "queue_number": 1,
-                 "name": "Testing Nomor 1", "is_test": True, "pets": []},
+                 "name": "Testing Nomor 1", "is_test": True, "checkins": [],
+                 "pets": [{"id": "9b000000-4444-4a2b-8c3d-000000000004", "name": "Uji", "type": "Anjing", "sticker_letter": "A"}]},
             ])
         else:
             self._jawab(404, {})
@@ -100,7 +104,11 @@ def main() -> int:
             r = c.get("/api/pb/pemilik", params={"kode": OWNER})
             o = r.json()
             u.cek("UUID dari QR menemukan pemilik", r.status_code == 200 and o["nama"] == "Felicia Cynthia", r.text[:200])
-            u.cek("hewan diurutkan per nama dan membawa jenis", [h["nama"] for h in o["hewan"]] == ["Candy", "Mochi"] and o["hewan"][0]["jenis"] == "Anjing")
+            u.cek("hewan urut huruf stiker, membawa jenis dan label", [h["label"] for h in o["hewan"]] == ["027A", "027B"] and o["hewan"][0]["jenis"] == "Anjing", o["hewan"])
+            u.cek("nomor = nomor kedatangan, nomor pendaftaran disimpan terpisah", o["nomor"] == 27 and o["nomor_daftar"] == 88)
+            u.cek("hewan yang tidak dibawa tidak ditawarkan", all(h["nama"] != "Tidakikut" for h in o["hewan"]))
+            belum = c.post("/api/sessions", json={"owner_id": "9b000000-2222-4a2b-8c3d-000000000002", "pet_id": "9b000000-4444-4a2b-8c3d-000000000004"})
+            u.cek("peserta yang belum reg ulang ditolak dengan pesan jelas", belum.status_code in (409, 422) and "reg ulang" in belum.text, belum.text[:200])
             u.cek("kode 8 huruf dari WhatsApp juga dikenali", c.get("/api/pb/pemilik", params={"kode": "3F2A91C4"}).status_code == 200)
             u.cek("kode tak dikenal = 404", c.get("/api/pb/pemilik", params={"kode": "deadbeef"}).status_code == 404)
             u.cek("token booth terkirim di tiap permintaan", PostgRESTTiruan.auth_salah == 0)
@@ -108,8 +116,8 @@ def main() -> int:
             print("== 2. Sesi per hewan ==")
             r = c.post("/api/sessions", json={"owner_id": OWNER, "pet_id": PET_A})
             s = r.json()
-            u.cek("sesi dibuat dari data pendaftaran", r.status_code == 201 and s["guest_name"] == "Candy (Felicia Cynthia)", r.text[:200])
-            u.cek("data hewan tersimpan di sesi", s.get("pb", {}).get("jenis") == "Anjing" and s["pb"]["nomor"] == 88)
+            u.cek("sesi dibuat dari data pendaftaran", r.status_code == 201 and s["guest_name"] == "027A Candy (Felicia Cynthia)", r.text[:200])
+            u.cek("data hewan tersimpan di sesi", s.get("pb", {}).get("jenis") == "Anjing" and s["pb"]["nomor"] == 27 and s["pb"]["label"] == "027A")
             u.cek("kode sesi ditulis ke pets.mcfbooth_session_code",
                   u.tunggu(lambda: patch_untuk(PET_A, "mcfbooth_session_code"), 10) and
                   patch_untuk(PET_A, "mcfbooth_session_code")[0]["mcfbooth_session_code"] == s["session_code"])
@@ -129,14 +137,15 @@ def main() -> int:
             u.cek("sertifikat sampai Drive dan tercatat", bool(srt), c.get(f"/api/sessions/{s['id']}/sertifikat").json())
             if srt:
                 png, pdf = Path(srt["png_path"]), Path(srt["pdf_path"])
-                u.cek("nama berkas nomor_hewan_pemilik", png.name == "088_Candy_Felicia_Cynthia.png", png.name)
+                u.cek("nama berkas label_hewan_pemilik", png.name == "027A_Candy_Felicia_Cynthia.png", png.name)
                 with Image.open(png) as im:
                     u.cek("PNG berukuran A4 300 dpi", im.size == (3508, 2480), im.size)
                 u.cek("PDF valid", pdf.read_bytes()[:5] == b"%PDF-")
                 stat = c.get("/api/pengaturan").json()["drive"]["statistik_palsu"]
-                u.cek("PNG dan PDF ada di folder 3. Sertifikat",
-                      sorted(stat.get("berkas_sertifikat", [])) == ["088_Candy_Felicia_Cynthia.pdf", "088_Candy_Felicia_Cynthia.png"],
-                      stat.get("berkas_sertifikat"))
+                pohon = [j for j in stat.get("pohon", []) if "027" in j]
+                u.cek("foto + sertifikat di folder pemilik lalu folder hewan",
+                      sum(1 for j in pohon if "/027 Felicia Cynthia/027A Candy/" in j) == 4 and
+                      any(j.endswith("/027A Candy/027A_Candy_Felicia_Cynthia.pdf") for j in pohon), pohon)
                 tulis = patch_untuk(PET_A, "certificate_url")
                 u.cek("tautan PDF ditulis ke pets.certificate_url", tulis and tulis[-1]["certificate_url"] == srt["link_pdf"], tulis)
                 u.cek("pratinjau PNG tersaji", c.get(f"/api/sertifikat/{srt['id']}/berkas.png").headers["content-type"] == "image/png")
@@ -154,7 +163,7 @@ def main() -> int:
             r = c.get("/api/pb/pemilik", params={"kode": OWNER})
             u.cek("pencarian tetap jalan dari salinan lokal", r.status_code == 200 and r.json()["dari_salinan"], r.text[:200])
             s2 = c.post("/api/sessions", json={"owner_id": OWNER, "pet_id": PET_B}).json()
-            u.cek("sesi hewan kedua tetap bisa dimulai saat offline", s2.get("guest_name") == "Mochi (Felicia Cynthia)", s2)
+            u.cek("sesi hewan kedua tetap bisa dimulai saat offline", s2.get("guest_name") == "027B Mochi (Felicia Cynthia)", s2)
             u.jatuhkan(kerja / "tether", 1, awal=60)
             f2 = u.tunggu(lambda: c.get(f"/api/sessions/{s2['id']}/photos").json(), 20)
             c.post(f"/api/sessions/{s2['id']}/sertifikat", json={"photo_id": f2[0]["id"]})
@@ -167,6 +176,10 @@ def main() -> int:
                 c.get(f"/api/sessions/{s2['id']}/sertifikat").json()), 40)
             u.cek("penjaga latar menyusulkan upload dan pencatatan", bool(akhir))
             u.cek("tautan Mochi tercatat", bool(patch_untuk(PET_B, "certificate_url")))
+            pohon = c.get("/api/pengaturan").json()["drive"]["statistik_palsu"]["pohon"]
+            pemilik = {j.split("/")[-3] for j in pohon if "/027A " in j or "/027B " in j}
+            u.cek("hewan kedua masuk folder pemilik yang sama (tidak ada folder kembar)",
+                  pemilik == {"027 Felicia Cynthia"} and any(j.endswith("/027B Mochi/027B_Mochi_Felicia_Cynthia.pdf") for j in pohon), pohon)
             u.cek("tidak ada traceback di log server", not any("Traceback" in l for l in srv.log),
                   [l for l in srv.log if "Traceback" in l or "Error" in l][:5])
 
