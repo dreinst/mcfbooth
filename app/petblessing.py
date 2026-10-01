@@ -1,6 +1,6 @@
 """Sambungan ke database pendaftaran Pet Blessing (PostgREST di VPS).
 
-Aktif hanya kalau `MCF_MODE=petblessing`. Tanpa itu photobooth berjalan
+Aktif hanya kalau `PHOTOBOOTH_MODE=petblessing`. Tanpa itu photobooth berjalan
 seperti biasa dan modul ini tidak pernah memanggil jaringan.
 
 Yang dilakukan:
@@ -34,7 +34,12 @@ from .jalur import env_float
 
 log = logging.getLogger(__name__)
 
-AKTIF = os.environ.get("MCF_MODE", "").strip().lower() == "petblessing"
+# PHOTOBOOTH_MODE: "mcfbooth" (bawaan, photobooth biasa) atau "petblessing".
+MODE = os.environ.get("PHOTOBOOTH_MODE", "").strip().lower() or "mcfbooth"
+if MODE not in ("mcfbooth", "petblessing"):
+    log.warning("PHOTOBOOTH_MODE=%s tidak dikenal, dipakai mcfbooth.", MODE)
+    MODE = "mcfbooth"
+AKTIF = MODE == "petblessing"
 API = os.environ.get("PETBLESSING_API_URL", "").strip().rstrip("/")
 TOKEN = os.environ.get("PETBLESSING_BOOTH_TOKEN", "").strip()
 TIMEOUT = env_float("PETBLESSING_TIMEOUT", 6)

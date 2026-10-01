@@ -1,5 +1,5 @@
 /* Tema Pet Blessing 2026. Aktif hanya kalau <html data-pb> (dipasang /tema.js
-   saat MCF_MODE=petblessing). Palet dan huruf diambil dari situs pendaftaran
+   saat PHOTOBOOTH_MODE=petblessing). Palet dan huruf diambil dari situs pendaftaran
    petblessings (index.html): ungu tua, emerald, oranye sore, krem. Huruf
    dibundel di web/fonts supaya tetap jalan tanpa internet. */
 

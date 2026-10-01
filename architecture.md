@@ -756,7 +756,7 @@ membersihkan lewat Explorer.
 
 ## 11a. Mode Pet Blessing: sertifikat otomatis
 
-Aktif dengan `MCF_MODE=petblessing`. Tiga modul tambahan:
+Aktif dengan `PHOTOBOOTH_MODE=petblessing` (bawaan `mcfbooth`). Tiga modul tambahan:
 
 | Modul | Tanggung jawab |
 |---|---|

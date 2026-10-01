@@ -283,7 +283,7 @@ Figma berubah, ekspor ulang template dan sesuaikan `layout.json`.
 Tambahkan ke `.env`:
 
 ```
-MCF_MODE=petblessing
+PHOTOBOOTH_MODE=petblessing
 PETBLESSING_API_URL=http://<IP Mac server lokal>:8080/rest
 PETBLESSING_BOOTH_TOKEN=<JWT peran booth_worker, minta ke admin>
 DRIVE_FOLDER_RAW_ID=1sAZVYbKXhEhs_-QQCWcKIaQPdVAeQeNH
@@ -306,7 +306,7 @@ petblessings. Token itu hanya bisa membaca nama pemilik, nomor antrean, dan data
 lalu menulis dua kolom: `pets.mcfbooth_session_code` dan `pets.certificate_url`. Nomor HP,
 donasi, dan bukti transfer tidak terlihat dari booth.
 
-Tanpa `MCF_MODE`, aplikasi berjalan seperti photobooth biasa.
+Bawaan repo ini `PHOTOBOOTH_MODE=mcfbooth`: aplikasi berjalan seperti photobooth biasa.
 
 ### Per hewan
 

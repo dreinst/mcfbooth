@@ -479,7 +479,7 @@ def pemeriksaan_awal():
 
     return {
         "versi": VERSI,
-        "mode": "petblessing" if petblessing.AKTIF else "umum",
+        "mode": petblessing.MODE,
         "pb_siap": petblessing.siap(),
         "drive": {
             **st,
