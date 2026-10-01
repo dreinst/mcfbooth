@@ -6,13 +6,15 @@
 <title>Sesi — MCF Photobooth</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="ui.css">
+<script src="/tema.js"></script>
+<link rel="stylesheet" href="/pb/tema.css">
 </head>
 <body>
 
 <div class="app">
 
   <aside class="sidebar">
-    <div class="brand"><span class="mark" aria-hidden="true"></span> MCF Photobooth <small>v1.1</small></div>
+    <div class="brand"><span class="mark" aria-hidden="true"></span> <span data-merek>MCF Photobooth</span> <small>v1.1</small></div>
     <nav class="nav" aria-label="Navigasi utama">
       <a href="index.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.2 6.6h2.4l1.1-1.8h6.6l1.1 1.8h2.4a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H3.2a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="11" r="2.9" stroke="currentColor" stroke-width="1.5"/></svg></span>Sesi</a>
       <a href="riwayat.html"><span class="nav-icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7.4" stroke="currentColor" stroke-width="1.5"/><path d="M10 5.8v4.5l3 1.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Riwayat<span class="nav-badge" data-badge-riwayat></span></a>
@@ -77,16 +79,17 @@
         <div class="split">
           <div class="card card-hero" data-kartu-pb hidden>
             <span class="section-label">Pet Blessing</span>
-            <h2 class="h1">Scan QR pendaftaran</h2>
-            <p class="body muted" style="margin-top:8px">Arahkan QR di HP pemilik ke kamera laptop, atau pakai scanner. Kode 8 huruf dari pesan WhatsApp juga bisa diketik.</p>
+            <h2 class="h1">Cari nama pemilik</h2>
+            <p class="body muted" style="margin-top:8px">Ketik nama pemilik atau nomor kedatangan, lalu tap namanya. Kalau pemilik sempat menunjukkan QR, scan juga bisa.</p>
 
             <div style="margin-top:24px">
-              <label class="field-label" for="inputKodePb">QR atau kode pendaftaran</label>
+              <label class="field-label" for="inputKodePb">Nama pemilik, nomor kedatangan, atau QR</label>
               <div class="row" style="gap:8px;flex-wrap:nowrap">
-                <input class="input" id="inputKodePb" type="text" placeholder="mis. 3F2A91C4" autocomplete="off" maxlength="64" style="flex:1">
+                <input class="input" id="inputKodePb" type="text" placeholder="mis. Budi Santoso" autocomplete="off" autocapitalize="words" spellcheck="false" maxlength="80" style="flex:1">
                 <button class="btn" type="button" data-pb-cari data-butuh-server>Cari</button>
               </div>
               <p class="field-hint" data-pb-hint aria-live="polite"></p>
+              <div class="pb-saran" data-pb-saran hidden></div>
             </div>
 
             <div data-pb-kamera-wrap hidden style="margin-top:12px">

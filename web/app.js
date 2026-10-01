@@ -33,6 +33,12 @@
     });
   }
 
+  // Mode Pet Blessing: /tema.js memasang <html data-pb> sebelum halaman tampil.
+  if (document.documentElement.hasAttribute('data-pb')) {
+    $$('[data-merek]').forEach(function (n) { n.textContent = 'Pet Blessing 2026'; });
+    document.title = document.title.replace('MCF Photobooth', 'Pet Blessing Photobooth');
+  }
+
   function el(tag, attrs, children) {
     var n = document.createElement(tag);
     if (attrs) Object.keys(attrs).forEach(function (k) {
@@ -281,7 +287,7 @@
       chipSesi: $('[data-chip-sesi]'), chipUpload: $('[data-chip-upload]'),
       dialog: $('#dialogSelesai'), btnSelesai: $('#btnSelesai'), alasanSelesai: $('[data-alasan-selesai]'),
       kartuPb: $('[data-kartu-pb]'), kartuNama: $('[data-kartu-nama]'), kodePb: $('#inputKodePb'), hintPb: $('[data-pb-hint]'),
-      hasilPb: $('[data-pb-hasil]'), nomorPb: $('[data-pb-nomor]'), pemilikPb: $('[data-pb-pemilik]'), hewanPb: $('[data-pb-hewan]'), alasanPb: $('[data-alasan-pb]'),
+      hasilPb: $('[data-pb-hasil]'), nomorPb: $('[data-pb-nomor]'), pemilikPb: $('[data-pb-pemilik]'), hewanPb: $('[data-pb-hewan]'), saranPb: $('[data-pb-saran]'), alasanPb: $('[data-alasan-pb]'),
       kameraWrap: $('[data-pb-kamera-wrap]'), video: $('[data-pb-video]'),
       kartuSrt: $('[data-kartu-sertifikat]'), chipSrt: $('[data-chip-sertifikat]'), infoSrt: $('[data-sertifikat-info]'), btnSrt: $('[data-buat-sertifikat]'),
       pdfSrt: $('[data-sertifikat-pdf]'), driveSrt: $('[data-sertifikat-drive]'), imgSrt: $('[data-sertifikat-img]'),
@@ -560,14 +566,48 @@
     }
     function muatUlangFoto() { if (sesi) api('/api/sessions/' + sesi.id + '/photos').then(function (fs) { foto = fs; render(); }).catch(function () {}); }
 
-    /* ---- Pet Blessing: scan QR, pilih hewan ---- */
+    /* ---- Pet Blessing: cari nama atau scan QR, pilih hewan ---- */
+    // Isi QR (UUID) atau kode 8 huruf dari WhatsApp; selain itu dianggap nama
+    // pemilik atau nomor kedatangan.
+    function kodePb(t) { return /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(t) || /^[0-9a-f]{8}$/i.test(t); }
+    var saranPb = [], timerSaran = null, urutSaran = 0;
+    function kapitalPb() {
+      var i = e.kodePb, a = i.selectionStart, b = i.selectionEnd;
+      var rapi = i.value.replace(/(^|\s)(\S)/g, function (m, s1, h) { return s1 + h.toUpperCase(); });
+      if (rapi !== i.value) { i.value = rapi; i.setSelectionRange(a, b); }
+    }
+    function tutupSaran() { saranPb = []; e.saranPb.textContent = ''; e.saranPb.hidden = true; }
+    function cariNamaPb(langsungPilih) {
+      var q = e.kodePb.value.trim(), ke = ++urutSaran;
+      if (!q || kodePb(q)) { tutupSaran(); return; }
+      api('/api/pb/cari?q=' + encodeURIComponent(q)).then(function (r) {
+        if (ke !== urutSaran) return;
+        saranPb = r.hasil; e.saranPb.textContent = '';
+        e.hintPb.className = r.dari_salinan ? 'field-hint is-wait' : 'field-hint';
+        e.hintPb.textContent = !saranPb.length ? 'Tidak ada pendaftar dengan nama atau nomor itu.'
+          : r.dari_salinan ? 'Internet putus: data diambil dari salinan terakhir di laptop.' : '';
+        saranPb.forEach(function (o) {
+          e.saranPb.appendChild(el('button', { class: 'btn', type: 'button', 'data-pb-saran-id': o.id }, [
+            el('span', {}, [el('strong', { text: o.nama }), document.createTextNode(o.hewan.length ? ' · ' + o.hewan.join(', ') : '')]),
+            el('span', { class: 'nomor', text: o.nomor ? 'No. ' + o.nomor : 'belum reg ulang' })
+          ]));
+        });
+        e.saranPb.hidden = !saranPb.length;
+        if (langsungPilih && saranPb.length === 1) cariPb(saranPb[0].id);
+      }).catch(function (err) { if (ke === urutSaran) { tutupSaran(); e.hintPb.className = 'field-hint is-bad'; e.hintPb.textContent = err.message; } });
+    }
+    function enterPb() {
+      var q = e.kodePb.value.trim();
+      clearTimeout(timerSaran);
+      if (kodePb(q)) cariPb(q); else cariNamaPb(true);
+    }
     function cariPb(kode) {
       kode = (kode || '').trim();
       if (kode.length < 8) { e.hintPb.className = 'field-hint is-wait'; e.hintPb.textContent = 'Kode minimal 8 huruf.'; return; }
       e.hintPb.className = 'field-hint'; e.hintPb.textContent = 'Mencari…';
       api('/api/sessions/bersiap', { method: 'POST' }).catch(function () {});
       api('/api/pb/pemilik?kode=' + encodeURIComponent(kode)).then(function (o) {
-        pemilikPb = o; e.kodePb.value = '';
+        pemilikPb = o; e.kodePb.value = ''; tutupSaran();
         e.hintPb.className = o.dari_salinan ? 'field-hint is-wait' : 'field-hint';
         e.hintPb.textContent = o.dari_salinan ? 'Internet putus: data diambil dari salinan terakhir di laptop.' : '';
         e.nomorPb.textContent = (o.nomor ? 'Nomor kedatangan ' + o.nomor : 'BELUM REG ULANG, arahkan ke meja reg ulang dulu') + (o.uji ? ' · DATA UJI' : '');
@@ -681,8 +721,15 @@
 
     /* ---- ikatan ---- */
     e.mulai.addEventListener('click', mulai);
-    e.kodePb.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') cariPb(e.kodePb.value); });
-    root.querySelector('[data-pb-cari]').addEventListener('click', function () { cariPb(e.kodePb.value); });
+    e.kodePb.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') enterPb(); });
+    e.kodePb.addEventListener('input', function () {
+      kapitalPb(); clearTimeout(timerSaran);
+      timerSaran = setTimeout(function () { cariNamaPb(false); }, 250);
+    });
+    root.querySelector('[data-pb-cari]').addEventListener('click', enterPb);
+    e.saranPb.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-pb-saran-id]'); if (b) cariPb(b.dataset.pbSaranId);
+    });
     root.querySelector('[data-pb-kamera]').addEventListener('click', mulaiKamera);
     e.hewanPb.addEventListener('click', function (ev) {
       var b = ev.target.closest('[data-pb-pilih]'); if (b && !nonaktif(b)) mulaiPb(b.dataset.pbPilih);

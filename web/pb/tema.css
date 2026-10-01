@@ -1,0 +1,70 @@
+/* Tema Pet Blessing 2026. Aktif hanya kalau <html data-pb> (dipasang /tema.js
+   saat MCF_MODE=petblessing). Palet dan huruf diambil dari situs pendaftaran
+   petblessings (index.html): ungu tua, emerald, oranye sore, krem. Huruf
+   dibundel di web/fonts supaya tetap jalan tanpa internet. */
+
+@font-face {
+  font-family: "Fraunces";
+  src: url("/fonts/Fraunces-600-latin.woff2") format("woff2");
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Work Sans";
+  src: url("/fonts/WorkSans-latin.woff2") format("woff2");
+  font-weight: 400 700; font-style: normal; font-display: swap;
+}
+
+[data-pb] {
+  --bg:            #FFF9F0;
+  --bg-glow:       radial-gradient(1100px 560px at 6% -12%, rgba(214, 35, 111, .07), transparent 60%),
+                   radial-gradient(900px 480px at 100% 0%, rgba(14, 143, 122, .08), transparent 55%);
+  --surface:       #FFFDF8;
+  --surface-2:     #FFF7EA;
+  --surface-3:     #F6ECDA;
+  --line:          #F0E4CC;
+  --line-strong:   #E2D0AE;
+
+  --ink:           #241B2E;
+  --ink-2:         #5E5258;
+  --ink-3:         #6E6266;
+
+  --accent:        #3B1052;
+  --accent-strong: #2A0B3B;
+  --accent-soft:   #F1E7F6;
+
+  --secondary:        #E0762A;
+  --secondary-strong: #B85A16;
+  --sunset-gradient:  linear-gradient(135deg, #3B1052 0%, #0E8F7A 55%, #E0762A 100%);
+
+  --font-ui: "Work Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+[data-pb] .display, [data-pb] .h1, [data-pb] .h2,
+[data-pb] .page-title, [data-pb] .guest-name, [data-pb] .guest-wordmark {
+  font-family: "Fraunces", Georgia, serif; font-weight: 600; letter-spacing: -.01em;
+}
+[data-pb] .h1, [data-pb] .h2 { color: var(--accent); }
+
+[data-pb] .sidebar { background: rgba(255, 253, 248, .9); }
+[data-pb] .brand { font-family: "Fraunces", Georgia, serif; font-weight: 600; color: var(--accent); line-height: 1.15; }
+[data-pb] .brand small { font-family: var(--font-ui); }
+
+/* Logo badge menggantikan tanda MCF di sidebar dan layar tamu. */
+[data-pb] .brand .mark, [data-pb] .guest-wordmark .mark {
+  background: url("/pb/logo-pet-blessing.png") center / contain no-repeat;
+  border-radius: 50%;
+}
+[data-pb] .brand .mark { width: 44px; height: 44px; flex: 0 0 44px; }
+
+[data-pb] .guest-wordmark { flex-direction: column; color: var(--accent); }
+[data-pb] .guest-wordmark .mark { width: 22vw; height: 22vw; border-radius: 50%; }
+[data-pb] .guest {
+  background: radial-gradient(70vw 50vw at 50% -10%, rgba(214, 35, 111, .08), transparent 60%),
+              radial-gradient(60vw 40vw at 50% 110%, rgba(14, 143, 122, .08), transparent 60%), var(--bg);
+}
+[data-pb] .guest-name { color: var(--accent); }
+
+/* Saran nama pemilik di kartu Pet Blessing. */
+.pb-saran { display: grid; gap: 8px; margin-top: 10px; }
+.pb-saran .btn { justify-content: space-between; text-align: left; min-height: 52px; }
+.pb-saran .nomor { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); }

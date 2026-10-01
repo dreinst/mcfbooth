@@ -61,9 +61,9 @@ class PostgRESTTiruan(BaseHTTPRequestHandler):
             return
         if self.path.startswith("/owners?"):
             self._jawab(200, [
-                {"id": OWNER, "queue_number": 88, "name": "Felicia Cynthia", "is_test": False,
+                {"id": OWNER, "queue_number": 88, "name": "felicia CYNTHIA", "is_test": False,
                  "checkins": [{"post": "reg_ulang", "arrival_number": 27}],
-                 "pets": [{"id": PET_B, "name": "Mochi", "type": "Kucing", "sticker_letter": "B", "hadir": True},
+                 "pets": [{"id": PET_B, "name": "mochi", "type": "Kucing", "sticker_letter": "B", "hadir": True},
                           {"id": PET_A, "name": "Candy", "type": "Anjing", "sticker_letter": "A", "hadir": True},
                           {"id": "9b000000-3333-4a2b-8c3d-000000000003", "name": "Tidakikut", "type": "Kucing",
                            "sticker_letter": "C", "hadir": False}]},
@@ -112,6 +112,14 @@ def main() -> int:
             u.cek("peserta yang belum reg ulang ditolak dengan pesan jelas", belum.status_code in (409, 422) and "reg ulang" in belum.text, belum.text[:200])
             u.cek("kode 8 huruf dari WhatsApp juga dikenali", c.get("/api/pb/pemilik", params={"kode": "3F2A91C4"}).status_code == 200)
             u.cek("kode tak dikenal = 404", c.get("/api/pb/pemilik", params={"kode": "deadbeef"}).status_code == 404)
+            u.cek("nama pemilik dan hewan dirapikan jadi kapital tiap kata", o["nama"] == "Felicia Cynthia" and o["hewan"][1]["nama"] == "Mochi", o)
+            r = c.get("/api/pb/cari", params={"q": "cynthia fel"}).json()
+            u.cek("cari nama: semua kata harus ada, urutan bebas", [x["id"] for x in r["hasil"]] == [OWNER] and r["hasil"][0]["hewan"] == ["Candy", "Mochi"], r)
+            r = c.get("/api/pb/cari", params={"q": "027"}).json()
+            u.cek("cari nomor kedatangan (nol di depan boleh)", [x["id"] for x in r["hasil"]] == [OWNER], r)
+            u.cek("nama tak dikenal = daftar kosong", c.get("/api/pb/cari", params={"q": "zzz"}).json()["hasil"] == [])
+            js = c.get("/tema.js").text
+            u.cek("tema Pet Blessing dipasang lewat /tema.js", "data-pb" in js, js)
             u.cek("token booth terkirim di tiap permintaan", PostgRESTTiruan.auth_salah == 0)
 
             print("== 2. Sesi per hewan ==")

@@ -32,7 +32,7 @@ from .jalur import AKAR, env_bool, path_env  # noqa: E402
 load_dotenv(AKAR / ".env")
 
 from fastapi import FastAPI, Query, Request  # noqa: E402
-from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse, Response  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from sse_starlette.sse import EventSourceResponse  # noqa: E402
@@ -171,6 +171,17 @@ def _buat_sesi_pb(owner_id: str, pet_id: str) -> dict:
 
 
 # --------------------------------------------------------------- Pet Blessing
+
+
+@app.get("/api/pb/cari")
+def pb_cari(q: str = Query(..., min_length=1, max_length=80)):
+    """Nama pemilik atau nomor kedatangan → daftar calon (paling banyak 8)."""
+    if not petblessing.AKTIF:
+        raise db.GalatDB("Mode Pet Blessing tidak aktif di laptop ini.", "bukan_mode_pb")
+    hasil, dari_salinan = petblessing.cari_nama(q)
+    return {"hasil": [{"id": o["id"], "nama": o["nama"], "nomor": o["nomor"], "uji": o["uji"],
+                       "hewan": [h["nama"] for h in o["hewan"]]} for o in hasil],
+            "dari_salinan": dari_salinan}
 
 
 @app.get("/api/pb/pemilik")
@@ -667,6 +678,14 @@ async def sse_tamu():
 
 
 # --------------------------------------------------------------- Halaman
+
+
+@app.get("/tema.js", include_in_schema=False)
+def tema_js():
+    """Dimuat di <head> tiap halaman, sebelum tampil, supaya tema Pet Blessing
+    tidak berkedip dari tema MCF."""
+    isi = "document.documentElement.setAttribute('data-pb','');" if petblessing.AKTIF else ""
+    return Response(isi, media_type="text/javascript", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/tamu", include_in_schema=False)

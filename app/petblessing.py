@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -61,15 +62,21 @@ def _minta(metode: str, jalur: str, badan: dict | None = None) -> object:
         return json.loads(isi) if isi else None
 
 
+def rapikan(nama: str) -> str:
+    """Kapital di awal tiap kata: "budi SANTOSO" -> "Budi Santoso". Kata yang
+    sudah campuran (McDonald) dibiarkan."""
+    return " ".join(k.capitalize() if k.islower() or k.isupper() else k for k in (nama or "").split())
+
+
 def _bentuk(o: dict) -> dict:
     hewan = sorted(o.get("pets") or [], key=lambda p: (p.get("sticker_letter") or "", (p.get("name") or "").lower()))
     reg = next((c for c in o.get("checkins") or [] if c.get("post") == "reg_ulang"), None)
     nomor = reg and reg.get("arrival_number")
     return {
         "id": o["id"], "nomor": nomor, "nomor_daftar": o.get("queue_number"),
-        "nama": (o.get("name") or "").strip(), "uji": bool(o.get("is_test")),
+        "nama": rapikan(o.get("name")), "uji": bool(o.get("is_test")),
         # Hewan yang ditandai tidak dibawa saat reg ulang tidak ditawarkan di booth.
-        "hewan": [{"id": p["id"], "nama": (p.get("name") or "").strip(),
+        "hewan": [{"id": p["id"], "nama": rapikan(p.get("name")),
                    "jenis": (p.get("type") or "").strip(), "huruf": p.get("sticker_letter") or "",
                    "label": label(nomor, p.get("sticker_letter")) if nomor else ""}
                   for p in hewan if p.get("hadir") is not False],
@@ -121,6 +128,30 @@ def cari_pemilik(kode: str) -> tuple[dict | None, bool]:
     if segar is not None:
         return _cocok(segar, kode), False
     return _cocok(_cache(), kode), True
+
+
+_segar_pada, _putus = -1e9, False
+
+
+def cari_nama(q: str, batas: int = 8) -> tuple[list[dict], bool]:
+    """Untuk pemilik yang tangannya penuh menggendong hewan dan tidak bisa
+    menunjukkan QR: cari dari nama (semua kata harus ada) atau nomor
+    kedatangan. Daftar disegarkan paling sering tiap 15 detik supaya mengetik
+    tidak memanggil API di setiap huruf."""
+    global _segar_pada, _putus
+    if time.monotonic() - _segar_pada > 15:
+        _putus = segarkan() is None
+        _segar_pada = time.monotonic()
+    daftar, dari_salinan = _cache(), _putus
+    kata = q.lower().split()
+    if not kata:
+        return [], dari_salinan
+    angka = q.strip().lstrip("0")
+    hasil = [o for o in daftar
+             if (angka.isdigit() and str(o.get("nomor") or "") == angka)
+             or all(k in o["nama"].lower() for k in kata)]
+    hasil.sort(key=lambda o: (o.get("nomor") is None, o.get("nomor") or 0, o["nama"]))
+    return hasil[:batas], dari_salinan
 
 
 def pemilik_dari_id(owner_id: str) -> dict | None:
