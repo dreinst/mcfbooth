@@ -684,7 +684,9 @@ async def sse_tamu():
 def tema_js():
     """Dimuat di <head> tiap halaman, sebelum tampil, supaya tema Pet Blessing
     tidak berkedip dari tema MCF."""
-    isi = "document.documentElement.setAttribute('data-pb','');" if petblessing.AKTIF else ""
+    isi = ("document.documentElement.setAttribute('data-pb','');"
+           "document.querySelectorAll('link[rel=icon]').forEach(function(l){l.type='image/png';l.href='/pb/favicon.png';});"
+           if petblessing.AKTIF else "")
     return Response(isi, media_type="text/javascript", headers={"Cache-Control": "no-store"})
 
 
