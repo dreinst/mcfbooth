@@ -44,29 +44,40 @@ def main() -> int:
         log.error("Belum login Google (atau token kedaluwarsa). Login di Pengaturan booth.")
         return 1
 
-    baru = 0
+    baru = gagal = 0
     for o in pemilik:
         if o["uji"]:
             continue
-        nama_pemilik = petblessing.folder_pemilik({"nomor_daftar": o["nomor_daftar"], "pemilik": o["nama"]})
-        induk = drive_client._folder_pemilik(svc, drive_client.FOLDER_RAW_ID, nama_pemilik)
-        if drive_client.FOLDER_SERTIFIKAT_ID:
-            drive_client._folder_pemilik(svc, drive_client.FOLDER_SERTIFIKAT_ID, nama_pemilik)
-        for h in o["hewan"]:
-            nama = petblessing.folder_hewan({"huruf": h["huruf"], "hewan": h["nama"], "jenis": h["jenis"]})
-            kunci = f"drive_hewan:{induk}:{nama}"
-            if db.ambil_pengaturan(kunci):
-                continue
-            fid = drive_client._cari_subfolder(svc, induk, nama)
-            if not fid:
-                fid = drive_client._buat_folder(svc, nama, induk)["id"]
-                # Sama dengan folder buatan booth: link folder ini jadi QR untuk tamu.
-                svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"}, fields="id").execute()
-                baru += 1
-                log.info("Folder dibuat: %s/%s", nama_pemilik, nama)
-            db.simpan_pengaturan(kunci, fid)
-    log.info("Selesai: %d pemilik, %d folder hewan baru.", sum(1 for o in pemilik if not o["uji"]), baru)
+        try:
+            baru += _siapkan_pemilik(svc, o)
+        except Exception as e:  # jaringan putus/timeout: pemilik ini disusulkan putaran berikutnya
+            gagal += 1
+            log.warning("Gagal menyiapkan folder %s: %s", o["nama"], str(e)[:160])
+    log.info("Selesai: %d pemilik, %d folder hewan baru, %d pemilik gagal (diulang putaran berikutnya).",
+             sum(1 for o in pemilik if not o["uji"]), baru, gagal)
     return 0
+
+
+def _siapkan_pemilik(svc, o: dict) -> int:
+    baru = 0
+    nama_pemilik = petblessing.folder_pemilik({"nomor_daftar": o["nomor_daftar"], "pemilik": o["nama"]})
+    induk = drive_client._folder_pemilik(svc, drive_client.FOLDER_RAW_ID, nama_pemilik)
+    if drive_client.FOLDER_SERTIFIKAT_ID:
+        drive_client._folder_pemilik(svc, drive_client.FOLDER_SERTIFIKAT_ID, nama_pemilik)
+    for h in o["hewan"]:
+        nama = petblessing.folder_hewan({"huruf": h["huruf"], "hewan": h["nama"], "jenis": h["jenis"]})
+        kunci = f"drive_hewan:{induk}:{nama}"
+        if db.ambil_pengaturan(kunci):
+            continue
+        fid = drive_client._cari_subfolder(svc, induk, nama)
+        if not fid:
+            fid = drive_client._buat_folder(svc, nama, induk)["id"]
+            # Sama dengan folder buatan booth: link folder ini jadi QR untuk tamu.
+            svc.permissions().create(fileId=fid, body={"type": "anyone", "role": "reader"}, fields="id").execute()
+            baru += 1
+            log.info("Folder dibuat: %s/%s", nama_pemilik, nama)
+        db.simpan_pengaturan(kunci, fid)
+    return baru
 
 
 if __name__ == "__main__":
