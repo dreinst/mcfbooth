@@ -295,8 +295,10 @@ Hari H, API menunjuk server lokal di Mac (lihat `lokal/` di repo petblessings); 
 kedatangan dari reg ulang dan menolak peserta yang belum reg ulang.
 
 Dua ID folder di atas adalah folder panitia di Drive "Hari H": foto masuk
-`Raw Photo Pet Blessings/027 Nama Pemilik/027A Nama Hewan/`, sertifikat masuk
-`Sertifikat Pet Blessing/027 Nama Pemilik/027A_Hewan_Pemilik.pdf`. Karena folder itu bukan
+`Raw Photo Pet Blessings/088 Nama Pemilik/A Nama Hewan (Jenis)/` (088 = nomor pendaftaran, nomor di QR), sertifikat masuk
+`Sertifikat Pet Blessing/088 Nama Pemilik/027A_Hewan_Pemilik.pdf` (027A = nomor urut + huruf).
+Folder ini bisa disiapkan sebelum hari-H dari database: `python -m app.siapkan_folder_pb`
+(di Mac dijalankan launchd `com.dpro.pb-folder-drive` tiap 30 menit). Booth memakai folder yang sudah ada. Karena folder itu bukan
 buatan aplikasi, booth meminta izin Drive penuh saat ID diisi: login Google di Pengaturan
 harus diulang, memakai akun yang punya akses edit ke folder "Hari H". Tanpa dua ID itu,
 semuanya masuk folder aplikasi `MCF Photobooth/2. Result/027 Nama Pemilik/027A Nama Hewan/`.

@@ -634,6 +634,9 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
         parent = (induk and FOLDER_RAW_ID) or _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
         if induk:
             parent = _folder_pemilik(None, parent, induk)
+            ada = next((k for k, f in _palsu.folder.items() if f["nama"] == nama_folder and f["parent"] == parent), None)
+            if ada:
+                return {"id": ada, "link": f"https://drive.google.com/drive/folders/{ada}"}
         f = _palsu.buat_folder(nama_folder, parent)
         with _palsu.kunci:
             _palsu.n_folder_sesi += 1
@@ -649,6 +652,10 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
             parent = akar["id"] if akar else None
         if induk:
             parent = _folder_pemilik(svc, parent, induk)
+            # Pet Blessing: folder hewan bisa sudah disiapkan dari database, pakai itu.
+            ada = _cari_subfolder(svc, parent, nama_folder)
+            if ada:
+                return {"id": ada, "link": f"https://drive.google.com/drive/folders/{ada}"}
 
         folder = _buat_folder(svc, nama_folder, parent)
         folder_id, folder_link = folder["id"], folder["webViewLink"]

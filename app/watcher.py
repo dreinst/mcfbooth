@@ -242,10 +242,10 @@ def pasang_drive(sesi: dict) -> dict | None:
 
         pb = sesi.get("pb")
         if pb and pb.get("label"):
-            # Pet Blessing: "027 Nama Pemilik" / "027A Nama Hewan", supaya
-            # hasil foto dan sertifikat bisa dicek per pemilik di Drive.
-            folder = drive_client.buat_folder_sesi(
-                f"{pb['label']} {pb['hewan']}", induk=f"{int(pb['nomor']):03d} {pb['pemilik']}")
+            # Pet Blessing: "088 Nama Pemilik" / "A Nama Hewan (Jenis)", nama yang
+            # sama dengan folder yang disiapkan lebih dulu dari database.
+            from . import petblessing
+            folder = drive_client.buat_folder_sesi(petblessing.folder_hewan(pb), induk=petblessing.folder_pemilik(pb))
         else:
             folder = drive_client.buat_folder_sesi(sesi["session_code"])
         if not folder:

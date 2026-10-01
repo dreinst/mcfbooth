@@ -167,7 +167,7 @@ def _upload(sertifikat_id: int) -> None:
         folder = sesi.get("drive_folder_id")
         if folder and srt["status"] == "menunggu" and drive_client.terhubung():
             pb = sesi["pb"]
-            folder = drive_client.folder_sertifikat(f"{int(pb['nomor']):03d} {pb['pemilik']}", folder)
+            folder = drive_client.folder_sertifikat(petblessing.folder_pemilik(pb), folder)
         if srt["status"] == "menunggu" and folder and drive_client.terhubung():
             ulang = bool(srt.get("pesan"))
             png = srt["drive_png_id"] and {"id": srt["drive_png_id"], "link": srt["link_png"]} \

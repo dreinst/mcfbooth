@@ -1,5 +1,5 @@
 """Verifikasi mode Pet Blessing: scan QR → sesi per hewan → foto pilihan →
-sertifikat PNG+PDF → Drive "2. Result/027 Pemilik/027A Hewan" → tautan ke database pendaftaran.
+sertifikat PNG+PDF → Drive "Raw/088 Pemilik/A Hewan (Jenis)" → tautan ke database pendaftaran.
 
 Database pendaftaran (PostgREST) digantikan server tiruan di proses ini, Drive
 memakai tiruan MCF_DRIVE_PALSU. Tidak ada jaringan yang disentuh.
@@ -151,19 +151,19 @@ def main() -> int:
                     u.cek("PNG berukuran A4 300 dpi", im.size == (3508, 2480), im.size)
                 u.cek("PDF valid", pdf.read_bytes()[:5] == b"%PDF-")
                 stat = c.get("/api/pengaturan").json()["drive"]["statistik_palsu"]
-                pohon = [j for j in stat.get("pohon", []) if "027" in j]
+                pohon = [j for j in stat.get("pohon", []) if "088" in j]
                 if os.environ.get("DRIVE_FOLDER_SERTIFIKAT_ID"):
                     # Folder panitia: foto di Raw/pemilik/hewan, sertifikat di Sertifikat/pemilik.
                     u.cek("foto di folder Raw panitia, per pemilik lalu per hewan",
-                          sum(1 for j in pohon if j.startswith("palsu-raw/027 Felicia Cynthia/027A Candy/")) == 2, pohon)
+                          sum(1 for j in pohon if j.startswith("palsu-raw/088 Felicia Cynthia/A Candy (Anjing)/")) == 2, pohon)
                     u.cek("sertifikat di folder Sertifikat panitia, per pemilik",
                           sorted(j for j in pohon if j.startswith("palsu-sert/")) ==
-                          ["palsu-sert/027 Felicia Cynthia/027A_Candy_Felicia_Cynthia.pdf",
-                           "palsu-sert/027 Felicia Cynthia/027A_Candy_Felicia_Cynthia.png"], pohon)
+                          ["palsu-sert/088 Felicia Cynthia/027A_Candy_Felicia_Cynthia.pdf",
+                           "palsu-sert/088 Felicia Cynthia/027A_Candy_Felicia_Cynthia.png"], pohon)
                 else:
                     u.cek("foto + sertifikat di folder pemilik lalu folder hewan",
-                          sum(1 for j in pohon if "/027 Felicia Cynthia/027A Candy/" in j) == 4 and
-                          any(j.endswith("/027A Candy/027A_Candy_Felicia_Cynthia.pdf") for j in pohon), pohon)
+                          sum(1 for j in pohon if "/088 Felicia Cynthia/A Candy (Anjing)/" in j) == 4 and
+                          any(j.endswith("/A Candy (Anjing)/027A_Candy_Felicia_Cynthia.pdf") for j in pohon), pohon)
                 tulis = patch_untuk(PET_A, "certificate_url")
                 u.cek("tautan PDF ditulis ke pets.certificate_url", tulis and tulis[-1]["certificate_url"] == srt["link_pdf"], tulis)
                 u.cek("pratinjau PNG tersaji", c.get(f"/api/sertifikat/{srt['id']}/berkas.png").headers["content-type"] == "image/png")
@@ -195,9 +195,9 @@ def main() -> int:
             u.cek("penjaga latar menyusulkan upload dan pencatatan", bool(akhir))
             u.cek("tautan Mochi tercatat", bool(patch_untuk(PET_B, "certificate_url")))
             pohon = c.get("/api/pengaturan").json()["drive"]["statistik_palsu"]["pohon"]
-            pemilik = {j.split("/")[-3] for j in pohon if "/027A " in j or "/027B " in j}
+            pemilik = {j.split("/")[-3] for j in pohon if "/A Candy " in j or "/B Mochi " in j}
             u.cek("hewan kedua masuk folder pemilik yang sama (tidak ada folder kembar)",
-                  pemilik == {"027 Felicia Cynthia"} and any(j.endswith("027B_Mochi_Felicia_Cynthia.pdf") for j in pohon), pohon)
+                  pemilik == {"088 Felicia Cynthia"} and any(j.endswith("027B_Mochi_Felicia_Cynthia.pdf") for j in pohon), pohon)
             u.cek("tidak ada traceback di log server", not any("Traceback" in l for l in srv.log),
                   [l for l in srv.log if "Traceback" in l or "Error" in l][:5])
 

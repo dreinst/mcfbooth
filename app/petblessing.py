@@ -82,10 +82,23 @@ def _bentuk(o: dict) -> dict:
         "nama": rapikan(o.get("name")), "uji": bool(o.get("is_test")),
         # Hewan yang ditandai tidak dibawa saat reg ulang tidak ditawarkan di booth.
         "hewan": [{"id": p["id"], "nama": rapikan(p.get("name")),
-                   "jenis": (p.get("type") or "").strip(), "huruf": p.get("sticker_letter") or "",
+                   "jenis": rapikan(p.get("type")), "huruf": p.get("sticker_letter") or "",
                    "label": label(nomor, p.get("sticker_letter")) if nomor else ""}
                   for p in hewan if p.get("hadir") is not False],
     }
+
+
+def folder_pemilik(pb: dict) -> str:
+    """Nama folder pemilik di Drive: nomor pendaftaran (nomor di QR) + nama,
+    misalnya "088 Felicia Cynthia". Sudah ada sebelum hari-H, jadi folder bisa
+    disiapkan lebih dulu (lihat app/siapkan_folder_pb.py) dan dipakai booth."""
+    return f"{int(pb.get('nomor_daftar') or pb.get('nomor') or 0):03d} {pb['pemilik']}"
+
+
+def folder_hewan(pb: dict) -> str:
+    """Nama folder hewan: huruf stiker + nama + jenis, misalnya "A Candy (Anjing)"."""
+    nama = " ".join(x for x in (pb.get("huruf"), pb.get("hewan")) if x)
+    return nama + (f" ({pb['jenis']})" if pb.get("jenis") else "")
 
 
 def label(nomor: int, huruf: str | None) -> str:
