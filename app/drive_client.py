@@ -603,7 +603,22 @@ def pastikan_struktur() -> dict | None:
 _kunci_pemilik = threading.Lock()
 
 
-def _folder_pemilik(svc, parent: str, nama: str) -> str | None:
+def _ganti_nama(svc, fid: str | None, nama: str) -> str | None:
+    """Folder yang disiapkan sebelum hari-H diberi nama nomor urut; isi dan link tetap."""
+    if fid:
+        if PALSU:
+            _palsu.folder[fid]["nama"] = nama
+        else:
+            svc.files().update(fileId=fid, body={"name": nama}).execute()
+        log.info("Folder Drive diganti nama: %s", nama)
+    return fid
+
+
+def _cari_palsu(parent: str, nama: str) -> str | None:
+    return next((k for k, f in _palsu.folder.items() if f["nama"] == nama and f["parent"] == parent), None)
+
+
+def _folder_pemilik(svc, parent: str, nama: str, lama: str | None = None) -> str | None:
     """Folder pengelompokan per pemilik di bawah '2. Result'. Dicari dulu
     (cache di pengaturan, lalu Drive) supaya hewan kedua pemilik yang sama
     masuk folder yang sama, tidak membuat folder kembar."""
@@ -612,16 +627,17 @@ def _folder_pemilik(svc, parent: str, nama: str) -> str | None:
         cached = db.ambil_pengaturan(kunci_cache)
         if cached and (PALSU or _folder_bisa_diakses(svc, cached)):
             return cached
-        if PALSU:
-            fid = next((k for k, f in _palsu.folder.items() if f["nama"] == nama and f["parent"] == parent), None) \
-                or _palsu.buat_folder(nama, parent)["id"]
-        else:
-            fid = _cari_subfolder(svc, parent, nama) or _buat_folder(svc, nama, parent)["id"]
+        cari = (lambda n: _cari_palsu(parent, n)) if PALSU else (lambda n: _cari_subfolder(svc, parent, n))
+        # Folder nomor pendaftaran dicari lebih dulu: nama nomor urut bisa kebetulan sama
+        # dengan folder pendaftaran pemilik lain yang bernama sama (dua "Lita").
+        fid = (lama and lama != nama and _ganti_nama(svc, cari(lama), nama)) or cari(nama) \
+            or (_palsu.buat_folder(nama, parent)["id"] if PALSU else _buat_folder(svc, nama, parent)["id"])
         db.simpan_pengaturan(kunci_cache, fid)
         return fid
 
 
-def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
+def buat_folder_sesi(nama_folder: str, induk: str | None = None,
+                     lama: str | None = None, induk_lama: str | None = None) -> dict | None:
     """Folder sesi di bawah '2. Result' (atau langsung di bawah induk kalau
     nama subfolder dikosongkan), izin anyone-with-link viewer. `induk` =
     nama folder pengelompokan (Pet Blessing: satu folder per pemilik).
@@ -633,8 +649,8 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
             return None
         parent = (induk and FOLDER_RAW_ID) or _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
         if induk:
-            parent = _folder_pemilik(None, parent, induk)
-            ada = next((k for k, f in _palsu.folder.items() if f["nama"] == nama_folder and f["parent"] == parent), None)
+            parent = _folder_pemilik(None, parent, induk, induk_lama)
+            ada = (lama and _ganti_nama(None, _cari_palsu(parent, lama), nama_folder)) or _cari_palsu(parent, nama_folder)
             if ada:
                 return {"id": ada, "link": f"https://drive.google.com/drive/folders/{ada}"}
         f = _palsu.buat_folder(nama_folder, parent)
@@ -651,9 +667,11 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None) -> dict | None:
             akar = folder_induk()
             parent = akar["id"] if akar else None
         if induk:
-            parent = _folder_pemilik(svc, parent, induk)
-            # Pet Blessing: folder hewan bisa sudah disiapkan dari database, pakai itu.
-            ada = _cari_subfolder(svc, parent, nama_folder)
+            parent = _folder_pemilik(svc, parent, induk, induk_lama)
+            # Pet Blessing: folder hewan bisa sudah disiapkan dari database (nama
+            # nomor pendaftaran); pakai itu dan ganti namanya ke nomor urut.
+            ada = (lama and _ganti_nama(svc, _cari_subfolder(svc, parent, lama), nama_folder)) \
+                or _cari_subfolder(svc, parent, nama_folder)
             if ada:
                 return {"id": ada, "link": f"https://drive.google.com/drive/folders/{ada}"}
 
@@ -681,14 +699,14 @@ def upload_qr(qr_path: str, nama_file: str) -> dict | None:
         return None
 
 
-def folder_sertifikat(nama_pemilik: str, folder_sesi: str | None) -> str | None:
+def folder_sertifikat(nama_pemilik: str, folder_sesi: str | None, lama: str | None = None) -> str | None:
     """Tujuan sertifikat Pet Blessing: folder pemilik di dalam folder
     Sertifikat panitia kalau DRIVE_FOLDER_SERTIFIKAT_ID diisi, selain itu
     folder hewan (folder sesi) itu sendiri."""
     if not FOLDER_SERTIFIKAT_ID:
         return folder_sesi
     try:
-        return _folder_pemilik(None if PALSU else _svc(), FOLDER_SERTIFIKAT_ID, nama_pemilik)
+        return _folder_pemilik(None if PALSU else _svc(), FOLDER_SERTIFIKAT_ID, nama_pemilik, lama)
     except Exception as e:
         log.error("Gagal menyiapkan folder sertifikat '%s': %s", nama_pemilik, str(e)[:200])
         return None

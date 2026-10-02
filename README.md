@@ -295,8 +295,10 @@ Hari H, API menunjuk server lokal di Mac (lihat `lokal/` di repo petblessings); 
 kedatangan dari reg ulang dan menolak peserta yang belum reg ulang.
 
 Dua ID folder di atas adalah folder panitia di Drive "Hari H": foto masuk
-`Raw Photo Pet Blessings/088 Nama Pemilik/A Nama Hewan (Jenis)/` (088 = nomor pendaftaran, nomor di QR), sertifikat masuk
-`Sertifikat Pet Blessing/088 Nama Pemilik/027A_Hewan_Pemilik.pdf` (027A = nomor urut + huruf).
+`Raw Photo Pet Blessings/028 Nama Pemilik/028A Nama Hewan (Jenis)/`, sertifikat masuk
+`Sertifikat Pet Blessing/028 Nama Pemilik/028A_Hewan_Pemilik.pdf` (028 = nomor urut di stiker).
+Sebelum hari-H folder sudah disiapkan dengan nomor pendaftaran (nomor di QR), misalnya
+`088 Nama Pemilik/A Nama Hewan (Jenis)`; saat sesi foto dimulai booth mengganti namanya ke nomor urut.
 Folder ini bisa disiapkan sebelum hari-H dari database: `python -m app.siapkan_folder_pb`
 (di Mac dijalankan launchd `com.dpro.pb-folder-drive` tiap 30 menit). Booth memakai folder yang sudah ada. Karena folder itu bukan
 buatan aplikasi, booth meminta izin Drive penuh saat ID diisi: login Google di Pengaturan

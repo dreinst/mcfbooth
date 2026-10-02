@@ -88,16 +88,20 @@ def _bentuk(o: dict) -> dict:
     }
 
 
-def folder_pemilik(pb: dict) -> str:
-    """Nama folder pemilik di Drive: nomor pendaftaran (nomor di QR) + nama,
-    misalnya "088 Felicia Cynthia". Sudah ada sebelum hari-H, jadi folder bisa
-    disiapkan lebih dulu (lihat app/siapkan_folder_pb.py) dan dipakai booth."""
-    return f"{int(pb.get('nomor_daftar') or pb.get('nomor') or 0):03d} {pb['pemilik']}"
+def folder_pemilik(pb: dict, daftar: bool = False) -> str:
+    """Nama folder pemilik di Drive. Sebelum hari-H folder disiapkan dengan
+    nomor pendaftaran (nomor di QR): "088 Felicia Cynthia" (daftar=True, atau
+    belum reg ulang). Saat sesi foto dimulai booth mengganti namanya ke nomor
+    urut di stiker: "028 Felicia Cynthia"."""
+    n = pb.get("nomor_daftar") if daftar or not pb.get("nomor") else pb["nomor"]
+    return f"{int(n or 0):03d} {pb['pemilik']}"
 
 
-def folder_hewan(pb: dict) -> str:
-    """Nama folder hewan: huruf stiker + nama + jenis, misalnya "A Candy (Anjing)"."""
-    nama = " ".join(x for x in (pb.get("huruf"), pb.get("hewan")) if x)
+def folder_hewan(pb: dict, daftar: bool = False) -> str:
+    """Nama folder hewan: "A Candy (Anjing)" sebelum hari-H, "028A Candy (Anjing)"
+    setelah reg ulang (nomor urut + huruf, sama dengan stiker dan sertifikat)."""
+    awal = pb.get("huruf") if daftar or not pb.get("nomor") else label(pb["nomor"], pb.get("huruf"))
+    nama = " ".join(x for x in (awal, pb.get("hewan")) if x)
     return nama + (f" ({pb['jenis']})" if pb.get("jenis") else "")
 
 

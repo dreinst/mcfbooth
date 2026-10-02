@@ -46,7 +46,8 @@ def main() -> int:
 
     baru = gagal = 0
     for o in pemilik:
-        if o["uji"]:
+        # Yang sudah reg ulang foldernya diambil alih booth (diganti nama ke nomor urut).
+        if o["uji"] or o["nomor"]:
             continue
         try:
             baru += _siapkan_pemilik(svc, o)

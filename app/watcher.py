@@ -242,10 +242,13 @@ def pasang_drive(sesi: dict) -> dict | None:
 
         pb = sesi.get("pb")
         if pb and pb.get("label"):
-            # Pet Blessing: "088 Nama Pemilik" / "A Nama Hewan (Jenis)", nama yang
-            # sama dengan folder yang disiapkan lebih dulu dari database.
+            # Pet Blessing: folder yang disiapkan dari database ("088 Pemilik" /
+            # "A Hewan (Jenis)") dipakai dan diganti nama ke nomor urut di stiker
+            # ("028 Pemilik" / "028A Hewan (Jenis)").
             from . import petblessing
-            folder = drive_client.buat_folder_sesi(petblessing.folder_hewan(pb), induk=petblessing.folder_pemilik(pb))
+            folder = drive_client.buat_folder_sesi(
+                petblessing.folder_hewan(pb), induk=petblessing.folder_pemilik(pb),
+                lama=petblessing.folder_hewan(pb, daftar=True), induk_lama=petblessing.folder_pemilik(pb, daftar=True))
         else:
             folder = drive_client.buat_folder_sesi(sesi["session_code"])
         if not folder:
