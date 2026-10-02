@@ -154,8 +154,9 @@ def main() -> int:
                 pohon = [j for j in stat.get("pohon", []) if "027" in j]
                 if os.environ.get("DRIVE_FOLDER_SERTIFIKAT_ID"):
                     # Folder panitia: foto di Raw/pemilik/hewan, sertifikat di Sertifikat/pemilik.
-                    u.cek("foto di folder Raw panitia, per pemilik lalu per hewan",
-                          sum(1 for j in pohon if j.startswith("palsu-raw/027 Felicia Cynthia/027A Candy (Anjing)/")) == 2, pohon)
+                    raw = sorted(j.rsplit("/", 1)[1] for j in pohon if j.startswith("palsu-raw/027 Felicia Cynthia/027A Candy (Anjing)/"))
+                    u.cek("foto + salinan sertifikat di folder Raw panitia, per pemilik lalu per hewan",
+                          len(raw) == 4 and "027A_Candy_Felicia_Cynthia.pdf" in raw and "027A_Candy_Felicia_Cynthia.png" in raw, raw)
                     u.cek("sertifikat di folder Sertifikat panitia, per pemilik",
                           sorted(j for j in pohon if j.startswith("palsu-sert/")) ==
                           ["palsu-sert/027 Felicia Cynthia/027A_Candy_Felicia_Cynthia.pdf",
@@ -166,6 +167,9 @@ def main() -> int:
                           any(j.endswith("/027A Candy (Anjing)/027A_Candy_Felicia_Cynthia.pdf") for j in pohon), pohon)
                 tulis = patch_untuk(PET_A, "certificate_url")
                 u.cek("tautan PDF ditulis ke pets.certificate_url", tulis and tulis[-1]["certificate_url"] == srt["link_pdf"], tulis)
+                u.cek("link folder foto ditulis ke pets.photo_folder_url",
+                      any((x.get("photo_folder_url") or "").startswith("https://drive.google.com/drive/folders/") for x in patch_untuk(PET_A, "photo_folder_url")),
+                      patch_untuk(PET_A, "photo_folder_url"))
                 u.cek("pratinjau PNG tersaji", c.get(f"/api/sertifikat/{srt['id']}/berkas.png").headers["content-type"] == "image/png")
             lain = c.post(f"/api/sessions/{s['id']}/sertifikat", json={"photo_id": 99999})
             u.cek("foto dari luar sesi ditolak", lain.status_code == 422, lain.status_code)

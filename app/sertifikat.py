@@ -164,7 +164,7 @@ def _upload(sertifikat_id: int) -> None:
         # Sertifikat masuk folder hewannya (di dalam folder pemilik). Kalau
         # folder sesi belum terpasang (Drive sempat putus), tunggu disusulkan.
         sesi = db.ambil_sesi(srt["session_id"])
-        folder = sesi.get("drive_folder_id")
+        folder = folder_hewan = sesi.get("drive_folder_id")
         if folder and srt["status"] == "menunggu" and drive_client.terhubung():
             pb = sesi["pb"]
             folder = drive_client.folder_sertifikat(petblessing.folder_pemilik(pb), folder,
@@ -175,6 +175,12 @@ def _upload(sertifikat_id: int) -> None:
                 or drive_client.upload_sertifikat(srt["png_path"], cek_dulu=ulang, folder_id=folder)
             pdf = png and (srt["drive_pdf_id"] and {"id": srt["drive_pdf_id"], "link": srt["link_pdf"]}
                            or drive_client.upload_sertifikat(srt["pdf_path"], cek_dulu=ulang, folder_id=folder))
+            # Folder sertifikat panitia terpisah: salinannya juga masuk folder foto hewan,
+            # supaya QR di layar tamu (dan hasil.html) membuka foto + sertifikat sekaligus.
+            if png and pdf and folder != folder_hewan:
+                salin = all(drive_client.upload_sertifikat(p, cek_dulu=True, folder_id=folder_hewan)
+                            for p in (srt["png_path"], srt["pdf_path"]))
+                pdf = pdf if salin else None
             if png and pdf:
                 srt = db.ubah_sertifikat(sertifikat_id, drive_png_id=png["id"], link_png=png["link"],
                                          drive_pdf_id=pdf["id"], link_pdf=pdf["link"],
@@ -197,6 +203,7 @@ def _catat(srt: dict) -> None:
     sesi = db.ambil_sesi(srt["session_id"])
     ok = petblessing.tulis_hewan(sesi["pb"]["pet_id"], {
         "certificate_url": srt["link_pdf"], "mcfbooth_session_code": sesi["session_code"],
+        "photo_folder_url": sesi.get("drive_folder_link"),
     })
     if ok:
         _kirim("sertifikat_tercatat", db.ubah_sertifikat(srt["id"], tercatat=1))

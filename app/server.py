@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import logging.handlers
 import os
 import shutil
 import time
@@ -41,9 +42,15 @@ from . import db, drive_client, peristiwa, petblessing, qr, sertifikat, watcher 
 
 VERSI = "1.1.0"
 
+# Log juga ditulis ke logs/booth.log (maks 5 x 2 MB) supaya bisa dibaca saat debugging,
+# termasuk oleh asisten AI (lihat AGENTS.md).
+(AKAR / "logs").mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    handlers=[logging.StreamHandler(),
+              logging.handlers.RotatingFileHandler(AKAR / "logs" / "booth.log", maxBytes=2_000_000,
+                                                   backupCount=5, encoding="utf-8")],
 )
 log = logging.getLogger(__name__)
 

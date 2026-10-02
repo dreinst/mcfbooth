@@ -260,6 +260,9 @@ def pasang_drive(sesi: dict) -> dict | None:
             return db.ambil_sesi(sesi["id"])
         if qr_path:
             drive_client.upload_qr(qr_path, f"{sesi['session_code']}.png")
+        if pb and pb.get("pet_id"):
+            # Halaman hasil.html (QR poster) membuka folder ini; dicatat lagi bersama sertifikat.
+            _jadwalkan(petblessing.tulis_hewan, pb["pet_id"], {"photo_folder_url": folder["link"]})
         baru = db.ambil_sesi(sesi["id"])
 
     peristiwa.kirim({"jenis": "sesi_drive_terpasang", "sesi": baru})
