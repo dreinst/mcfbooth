@@ -528,6 +528,16 @@ def folder_induk() -> dict | None:
             PARENT_FOLDER_ID,
         )
 
+    with _kunci_struktur:
+        return _folder_induk_aplikasi(svc)
+
+
+# Preflight, Mulai Sesi, dan penjaga latar bisa menyiapkan struktur bersamaan.
+# Tanpa kunci, masing-masing tidak menemukan folder lalu membuatnya sendiri (folder kembar).
+_kunci_struktur = threading.RLock()
+
+
+def _folder_induk_aplikasi(svc) -> dict | None:
     root_id = db.ambil_pengaturan("drive_root_id")
     if root_id and _folder_bisa_diakses(svc, root_id):
         db.simpan_pengaturan("drive_induk_sumber", "aplikasi")
@@ -568,6 +578,11 @@ def _subfolder(nama: str, kunci_cache: str) -> str | None:
         induk = folder_induk()
         return induk["id"] if induk else None
 
+    with _kunci_struktur:
+        return _subfolder_buat(svc, nama, kunci_cache)
+
+
+def _subfolder_buat(svc, nama: str, kunci_cache: str) -> str | None:
     cached = db.ambil_pengaturan(kunci_cache)
     if cached and _folder_bisa_diakses(svc, cached):
         return cached
