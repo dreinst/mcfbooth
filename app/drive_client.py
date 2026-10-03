@@ -757,19 +757,6 @@ def folder_sertifikat(nama_pemilik: str, folder_sesi: str | None, lama: str | No
         return None
 
 
-def _ganti_isi(file_id: str, path_lokal: str) -> dict | None:
-    try:
-        from googleapiclient.http import MediaFileUpload
-        mime = "application/pdf" if path_lokal.lower().endswith(".pdf") else "image/png"
-        media = MediaFileUpload(path_lokal, mimetype=mime, resumable=True, chunksize=4 * 1024 * 1024)
-        berkas = _svc().files().update(fileId=file_id, media_body=media, fields="id,webViewLink").execute()
-        log.info("Diganti isinya di Drive: %s", Path(path_lokal).name)
-        return {"id": berkas["id"], "link": berkas.get("webViewLink", "")}
-    except Exception as e:
-        log.error("Gagal mengganti isi '%s' di Drive: %s", path_lokal, str(e)[:200])
-        return None
-
-
 def upload_sertifikat(path_lokal: str, cek_dulu: bool = False, folder_id: str | None = None) -> dict | None:
     """Upload sertifikat Pet Blessing ke folder hewannya (`folder_id`, di
     dalam folder pemilik) atau, tanpa folder_id, ke subfolder '3. Sertifikat'.
@@ -778,12 +765,18 @@ def upload_sertifikat(path_lokal: str, cek_dulu: bool = False, folder_id: str | 
     if not parent:
         return None
     # Sertifikat hewan yang sama bisa dibuat lagi (sesi ulang, atau booth lain).
-    # Berkas bernama sama di Drive diganti isinya, supaya yang tersimpan selalu
-    # sertifikat terbaru dan tidak ada dua berkas kembar.
+    # Yang baru diupload dulu, lalu berkas lama bernama sama dibuang, supaya
+    # yang tersimpan selalu sertifikat terbaru dan tidak ada dua berkas kembar.
     lama = None if PALSU else cari_berkas(parent, Path(path_lokal).name)
-    hasil = _ganti_isi(lama, path_lokal) if lama else upload_foto(path_lokal, parent, cek_dulu=cek_dulu)
+    hasil = upload_foto(path_lokal, parent, cek_dulu=cek_dulu and not lama)
     if not hasil or PALSU:
         return hasil
+    if lama and lama != hasil["id"]:
+        try:
+            _svc().files().update(fileId=lama, body={"trashed": True}).execute()
+            log.info("Sertifikat lama dibuang, diganti yang baru: %s", Path(path_lokal).name)
+        except Exception as e:
+            log.warning("Sertifikat lama %s belum terbuang: %s", lama, str(e)[:120])
     try:
         svc = _svc()
         svc.permissions().create(
