@@ -132,6 +132,7 @@ def mulai(sesi: dict, foto: dict) -> dict:
     dasar = f"{awal}_{db._slug(pb['hewan'])}_{db._slug(pb['pemilik'])}"
     ke = len(db.sertifikat_sesi(sesi["id"])) + 1
     srt = db.buat_sertifikat(sesi["id"], foto["id"], dasar if ke == 1 else f"{dasar}_{ke}")
+    log.info("Sertifikat diminta: %s", srt["nama_berkas"])
     _kirim("sertifikat_mulai", srt)
     watcher._jadwalkan(_render, srt["id"])
     return srt
@@ -150,6 +151,7 @@ def _render(sertifikat_id: int) -> None:
         _kirim("sertifikat_gagal", db.ubah_sertifikat(sertifikat_id, status="failed", pesan=str(e)[:200]))
         return
     srt = db.ubah_sertifikat(sertifikat_id, png_path=png, pdf_path=pdf, status="menunggu", pesan=None)
+    log.info("Sertifikat dirender: %s", srt["nama_berkas"])
     _kirim("sertifikat_siap", srt)
     peristiwa.kirim({"jenis": "sertifikat_siap", "session_id": srt["session_id"]}, ke_operator=False)
     _upload(sertifikat_id)
