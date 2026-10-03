@@ -344,6 +344,7 @@ def _proses_foto_inti(path: Path) -> bool:
         return False
     if not path.exists():
         return True
+    log.info("Berkas selesai diterima dari kamera: %s", nama)
 
     sesi, alasan = _sesi_tujuan()
     if sesi is None:

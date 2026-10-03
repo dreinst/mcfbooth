@@ -658,7 +658,7 @@
     /* ---- Pet Blessing: sertifikat ---- */
     function gambarSertifikat(srt) {
       var status = srt ? srt.status : null;
-      var t = !srt ? ['chip-idle', 'dot-idle', 'Belum dibuat', 'Tap foto terbaik di bawah, lalu tekan Buat sertifikat.']
+      var t = !srt ? ['chip-idle', 'dot-idle', 'Belum dibuat', 'Tekan Buat sertifikat untuk memakai jepretan terakhir, atau tap foto lain dulu.']
         : status === 'render' ? ['chip-wait', 'dot-wait', 'Sedang dibuat', 'Sertifikat sedang disusun dari foto pilihan.']
         : status === 'menunggu' ? ['chip-wait', 'dot-wait', 'Menunggu upload', srt.pesan || 'Sertifikat siap di laptop, sedang dikirim ke Drive.']
         : status === 'uploaded' ? ['chip-ok', 'dot-ok', srt.tercatat ? 'Di Drive, tercatat' : 'Di Drive', srt.tercatat ? 'PDF dan PNG sudah di Drive dan tautannya tercatat di data pendaftaran.' : 'PDF dan PNG sudah di Drive. Tautan ke data pendaftaran menyusul otomatis.']
@@ -669,7 +669,7 @@
       e.pdfSrt.hidden = !adaBerkas; if (adaBerkas) e.pdfSrt.href = '/api/sertifikat/' + srt.id + '/berkas.pdf';
       e.driveSrt.hidden = !(srt && srt.link_pdf); if (srt && srt.link_pdf) e.driveSrt.href = srt.link_pdf;
       e.btnSrt.textContent = srt && status !== 'failed' ? 'Buat ulang dengan foto pilihan' : 'Buat sertifikat';
-      setDisabled(e.btnSrt, !pilihan || status === 'render');
+      setDisabled(e.btnSrt, !fotoDipakai() || status === 'render');
     }
     function muatSertifikat() {
       if (!sesi || !sesi.pb) return;
@@ -679,12 +679,16 @@
     function pilihFoto(id) {
       pilihan = pilihan === id ? null : id;
       $$('.photo', e.grid).forEach(function (n) { n.classList.toggle('is-pilih', n.dataset.foto === String(pilihan)); });
-      setDisabled(e.btnSrt, !pilihan || (srtTerakhir && srtTerakhir.status === 'render'));
+      setDisabled(e.btnSrt, !fotoDipakai() || (srtTerakhir && srtTerakhir.status === 'render'));
+    }
+    // Tanpa foto yang di-tap, sertifikat memakai jepretan terakhir.
+    function fotoDipakai() {
+      return pilihan || (foto.length ? foto[foto.length - 1].id : null);
     }
     function buatSertifikat() {
-      if (!sesi || !pilihan || nonaktif(e.btnSrt)) return;
+      if (!sesi || !fotoDipakai() || nonaktif(e.btnSrt)) return;
       setDisabled(e.btnSrt, true);
-      api('/api/sessions/' + sesi.id + '/sertifikat', { method: 'POST', body: { photo_id: pilihan } }).then(function (srt) { srtTerakhir = srt; gambarSertifikat(srt); })
+      api('/api/sessions/' + sesi.id + '/sertifikat', { method: 'POST', body: { photo_id: fotoDipakai() } }).then(function (srt) { srtTerakhir = srt; gambarSertifikat(srt); })
         .catch(function (err) { toast(err.message, 'bad'); setDisabled(e.btnSrt, false); });
     }
 
@@ -774,6 +778,7 @@
       if (!milikSesi(d)) return;
       if (!foto.some(function (f) { return f.id === d.foto.id; })) { d.foto.nama = d.foto.nama || d.foto.local_path.split(/[\\/]/).pop(); d.foto.thumb = d.foto.thumb || d.foto.nama.replace(/\.[^.]+$/, '.jpg'); foto.push(d.foto); }
       render();
+      if (sesi.pb) gambarSertifikat(srtTerakhir);
     });
     ['foto_uploaded', 'foto_gagal', 'foto_retry'].forEach(function (j) {
       aliran.on(j, function (d) {
