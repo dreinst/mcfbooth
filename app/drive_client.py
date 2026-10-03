@@ -114,6 +114,7 @@ class _DrivePalsu:
         self.gagal_sisa = int(env_float("MCF_DRIVE_PALSU_GAGAL", 0))
         self.folder: dict[str, dict] = {}          # id → {"nama", "parent"}
         self.berkas: dict[str, list[str]] = {}     # folder_id → nama berkas
+        self.berkas_id: dict[str, dict] = {}       # file_id → {"nama", "parent", "sumber"}
         self.n_folder_sesi = 0
         self.n_upload = 0
         self.n_upload_gagal = 0
@@ -129,7 +130,7 @@ class _DrivePalsu:
             self.berkas.setdefault(fid, [])
             return {"id": fid, "webViewLink": f"https://drive.google.com/drive/folders/{fid}"}
 
-    def upload(self, folder_id: str, nama: str) -> dict | None:
+    def upload(self, folder_id: str, nama: str, sumber: str | None = None) -> dict | None:
         time.sleep(self.jeda / 2)
         with self.kunci:
             # Kegagalan yang disengaja hanya untuk foto — salinan QR ke "1. QR"
@@ -140,7 +141,19 @@ class _DrivePalsu:
                 return None
             self.n_upload += 1
             self.berkas.setdefault(folder_id, []).append(nama)
+            self.berkas_id[f"berkas-{self.n_upload}"] = {"nama": nama, "parent": folder_id, "sumber": sumber}
             return {"id": f"berkas-{self.n_upload}", "webViewLink": f"https://drive.google.com/file/d/berkas-{self.n_upload}"}
+
+    def pindah(self, file_id: str, ke: str, nama: str | None = None) -> bool:
+        with self.kunci:
+            b = self.berkas_id.get(file_id)
+            if not b:
+                return False
+            if b["nama"] in self.berkas.get(b["parent"], []):
+                self.berkas[b["parent"]].remove(b["nama"])
+            b["parent"], b["nama"] = ke, nama or b["nama"]
+            self.berkas.setdefault(ke, []).append(b["nama"])
+            return True
 
     def statistik(self) -> dict:
         with self.kunci:
@@ -736,6 +749,151 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None,
         return None
 
 
+# ------------------------------------------------------------ kotak masuk
+# Foto yang dijepret tanpa sesi naik ke '<Raw>/!Need Organized/Camera <booth>'
+# dan dipilah belakangan di meja pilah (app/pilah.py).
+
+NAMA_KOTAK = os.environ.get("DRIVE_FOLDER_KOTAK", "").strip() or "!Need Organized"
+AWALAN_KAMERA = "Camera "
+
+
+def _induk_kotak(svc) -> str | None:
+    parent = FOLDER_RAW_ID or _subfolder(NAMA_FOLDER_RESULT, "drive_result_id")
+    return _folder_pemilik(svc, parent, NAMA_KOTAK) if parent else None
+
+
+def folder_kotak(booth: str, sub: str | None = None) -> str | None:
+    """ID folder penampung satu kamera (dibuat kalau belum ada). `sub` =
+    subfolder di dalamnya, misalnya 'Disisihkan'."""
+    try:
+        svc = None if PALSU else _svc()
+        if (not PALSU and svc is None) or (PALSU and _palsu.mati()):
+            return None
+        induk = _induk_kotak(svc)
+        if not induk:
+            return None
+        fid = _folder_pemilik(svc, induk, AWALAN_KAMERA + booth)
+        return _folder_pemilik(svc, fid, sub) if sub else fid
+    except Exception as e:
+        log.error("Gagal menyiapkan kotak masuk %s: %s", booth, str(e)[:200])
+        return None
+
+
+def kamera_kotak() -> list[dict] | None:
+    """Semua folder 'Camera …' di kotak masuk: [{"id", "nama"}]. None = Drive tidak terjangkau."""
+    try:
+        svc = None if PALSU else _svc()
+        if (not PALSU and svc is None) or (PALSU and _palsu.mati()):
+            return None
+        induk = _induk_kotak(svc)
+        if not induk:
+            return None
+        if PALSU:
+            sub = [{"id": k, "name": f["nama"]} for k, f in _palsu.folder.items() if f["parent"] == induk]
+        else:
+            sub = svc.files().list(
+                q=f"'{_aman_q(induk)}' in parents and mimeType='{MIME_FOLDER}' and trashed=false",
+                fields="files(id,name)", pageSize=50,
+            ).execute().get("files", [])
+        return sorted(({"id": f["id"], "nama": f["name"][len(AWALAN_KAMERA):].strip()}
+                       for f in sub if f["name"].startswith(AWALAN_KAMERA)), key=lambda k: k["nama"])
+    except Exception as e:
+        log.warning("Gagal membaca kotak masuk: %s", str(e)[:160])
+        return None
+
+
+def isi_folder(folder_id: str) -> list[dict] | None:
+    """Berkas (bukan folder) di satu folder, urut nama: [{"id", "name", "size"}]."""
+    if PALSU:
+        if _palsu.mati():
+            return None
+        with _palsu.kunci:
+            return sorted(({"id": k, "name": b["nama"], "size": "0"} for k, b in _palsu.berkas_id.items()
+                           if b["parent"] == folder_id), key=lambda b: b["name"])
+    try:
+        svc = _svc()
+        if svc is None:
+            return None
+        hasil, token = [], None
+        while True:
+            res = svc.files().list(
+                q=f"'{_aman_q(folder_id)}' in parents and mimeType!='{MIME_FOLDER}' and trashed=false",
+                fields="nextPageToken, files(id,name,size)", orderBy="name", pageSize=200, pageToken=token,
+            ).execute()
+            hasil += res.get("files", [])
+            token = res.get("nextPageToken")
+            if not token:
+                return hasil
+    except Exception as e:
+        log.warning("Gagal membaca isi folder %s: %s", folder_id, str(e)[:160])
+        return None
+
+
+def pindah_berkas(file_id: str, dari: str, ke: str) -> bool:
+    """Pindahkan satu berkas antar folder Drive. ID dan tautannya tidak berubah."""
+    if PALSU:
+        return not _palsu.mati() and _palsu.pindah(file_id, ke)
+    try:
+        _svc().files().update(fileId=file_id, addParents=ke, removeParents=dari, fields="id").execute()
+        return True
+    except Exception as e:
+        log.error("Gagal memindah berkas %s: %s", file_id, str(e)[:200])
+        return False
+
+
+def buang_berkas(file_id: str) -> bool:
+    if PALSU:
+        return _palsu.pindah(file_id, "sampah")
+    try:
+        _svc().files().update(fileId=file_id, body={"trashed": True}).execute()
+        return True
+    except Exception as e:
+        log.warning("Gagal membuang berkas %s: %s", file_id, str(e)[:160])
+        return False
+
+
+def unduh_berkas(file_id: str, tujuan: Path) -> bool:
+    """Unduh isi berkas Drive ke `tujuan` (foto dari laptop lain untuk sertifikat)."""
+    tujuan.parent.mkdir(parents=True, exist_ok=True)
+    part = tujuan.with_name(tujuan.name + ".part")
+    try:
+        if PALSU:
+            sumber = _palsu.berkas_id.get(file_id, {}).get("sumber")
+            if not sumber or _palsu.mati():
+                return False
+            import shutil
+            shutil.copyfile(sumber, part)
+        else:
+            from googleapiclient.http import MediaIoBaseDownload
+            with open(part, "wb") as fh:
+                unduhan = MediaIoBaseDownload(fh, _svc().files().get_media(fileId=file_id), chunksize=8 * 1024 * 1024)
+                selesai = False
+                while not selesai:
+                    _, selesai = unduhan.next_chunk()
+        os.replace(part, tujuan)
+        return True
+    except Exception as e:
+        log.error("Gagal mengunduh berkas %s: %s", file_id, str(e)[:200])
+        return False
+
+
+def thumb_berkas(file_id: str) -> bytes | None:
+    """Thumbnail buatan Drive (JPEG) untuk foto yang berkasnya tidak ada di laptop ini."""
+    if PALSU:
+        return None
+    try:
+        svc = _svc()
+        meta = svc.files().get(fileId=file_id, fields="thumbnailLink").execute()
+        link = meta.get("thumbnailLink")
+        if not link:
+            return None
+        resp, isi = svc._http.request(link.rsplit("=", 1)[0] + "=s480")
+        return isi if resp.status == 200 else None
+    except Exception as e:
+        log.warning("Thumbnail Drive %s belum bisa diambil: %s", file_id, str(e)[:120])
+        return None
+
+
 def upload_qr(qr_path: str, nama_file: str) -> dict | None:
     """Simpan salinan QR ke subfolder '1. QR' — cadangan kalau laptop rusak."""
     try:
@@ -813,7 +971,7 @@ def upload_foto(path_lokal: str, folder_id: str, custom_name: str | None = None,
     if PALSU:
         if not path.exists() or _palsu.mati():
             return None
-        hasil = _palsu.upload(folder_id, nama)
+        hasil = _palsu.upload(folder_id, nama, str(path))
         return {"id": hasil["id"], "link": hasil["webViewLink"]} if hasil else None
 
     try:

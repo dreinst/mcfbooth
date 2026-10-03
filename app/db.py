@@ -84,6 +84,15 @@ CREATE TABLE IF NOT EXISTS sertifikat (
     created_at    TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sertifikat_sesi ON sertifikat (session_id);
+
+/* Berkas di tether_dropbox yang sudah beres ditangani. Disimpan supaya setelah
+   server dinyalakan ulang foto lama tidak masuk kotak masuk dua kali, dan foto
+   yang mendarat saat server mati tetap terambil. */
+CREATE TABLE IF NOT EXISTS sumber_selesai (
+    path   TEXT PRIMARY KEY,
+    ukuran INTEGER NOT NULL,
+    mtime  REAL    NOT NULL
+);
 """
 
 # Kolom yang ditambahkan setelah skema awal. CREATE TABLE IF NOT EXISTS tidak
@@ -299,6 +308,42 @@ def buat_sesi(nama_tamu: str, pb_data: dict | None = None) -> dict:
         return _bentuk(conn, baris)
 
 
+def buat_sesi_selesai(nama_tamu: str, pb_data: dict | None = None, kode: str | None = None) -> dict:
+    """Sesi yang langsung berstatus done: kotak masuk (foto yang belum dipilah)
+    dan sesi hasil pemilahan. Tidak menyentuh sesi active dan tidak mengambil
+    alih layar tamu. Dengan `kode`, sesi berkode itu dipakai ulang kalau sudah ada."""
+    with koneksi() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if kode:
+            ada = conn.execute("SELECT * FROM sessions WHERE session_code = ?", (kode,)).fetchone()
+            if ada:
+                return _bentuk(conn, ada)
+        else:
+            kode = _kode_bebas(conn, kode_sesi(nama_tamu))
+        saat = sekarang()
+        cur = conn.execute(
+            """INSERT INTO sessions (session_code, guest_name, status, started_at, finished_at, pb_data)
+               VALUES (?, ?, 'done', ?, ?, ?)""",
+            (kode, nama_tamu, saat, saat, json.dumps(pb_data, ensure_ascii=False) if pb_data else None),
+        )
+        return _bentuk(conn, conn.execute("SELECT * FROM sessions WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def hapus_sesi(sesi_id: int) -> None:
+    """Foto dan sertifikatnya ikut terhapus (ON DELETE CASCADE)."""
+    with koneksi() as conn:
+        conn.execute("DELETE FROM sessions WHERE id = ?", (sesi_id,))
+
+
+def sesi_pb(limit: int = 300) -> list[dict]:
+    """Sesi Pet Blessing terbaru dulu, untuk papan pantau."""
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM sessions WHERE pb_data IS NOT NULL ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [_bentuk(conn, b) for b in baris]
+
+
 def ambil_sesi(sesi_id: int) -> dict:
     with koneksi() as conn:
         baris = conn.execute(
@@ -416,6 +461,65 @@ def catat_foto(session_id: int, local_path: str) -> int:
             (session_id,),
         )
         return cur.lastrowid
+
+
+def catat_foto_drive(session_id: int, local_path: str, drive_file_id: str) -> int:
+    """Foto yang sudah ada di Drive (diupload laptop lain) dicatat langsung
+    sebagai uploaded. `local_path` boleh penanda kalau berkasnya tidak ada di sini."""
+    saat = sekarang()
+    with koneksi() as conn:
+        cur = conn.execute(
+            """INSERT INTO photo_uploads (session_id, local_path, drive_file_id, status, created_at, uploaded_at)
+               VALUES (?, ?, ?, 'uploaded', ?, ?)""",
+            (session_id, local_path, drive_file_id, saat, saat),
+        )
+        conn.execute("UPDATE sessions SET photo_count = photo_count + 1 WHERE id = ?", (session_id,))
+        return cur.lastrowid
+
+
+def pindah_foto(foto_id: int, sesi_id: int, local_path: str | None = None) -> None:
+    """Pindahkan satu foto ke sesi lain (pemilahan atau pembatalannya)."""
+    with koneksi() as conn:
+        lama = conn.execute("SELECT session_id FROM photo_uploads WHERE id = ?", (foto_id,)).fetchone()
+        if lama is None:
+            return
+        conn.execute(
+            "UPDATE photo_uploads SET session_id = ?, local_path = COALESCE(?, local_path) WHERE id = ?",
+            (sesi_id, local_path, foto_id),
+        )
+        conn.execute("UPDATE sessions SET photo_count = MAX(photo_count - 1, 0) WHERE id = ?", (lama["session_id"],))
+        conn.execute("UPDATE sessions SET photo_count = photo_count + 1 WHERE id = ?", (sesi_id,))
+
+
+def hapus_foto(foto_id: int) -> None:
+    with koneksi() as conn:
+        lama = conn.execute("SELECT session_id FROM photo_uploads WHERE id = ?", (foto_id,)).fetchone()
+        if lama is None:
+            return
+        conn.execute("DELETE FROM photo_uploads WHERE id = ?", (foto_id,))
+        conn.execute("UPDATE sessions SET photo_count = MAX(photo_count - 1, 0) WHERE id = ?", (lama["session_id"],))
+
+
+def foto_dari_drive_id(drive_file_id: str) -> dict | None:
+    with koneksi() as conn:
+        baris = conn.execute(
+            "SELECT * FROM photo_uploads WHERE drive_file_id = ? ORDER BY id DESC LIMIT 1", (drive_file_id,)
+        ).fetchone()
+        return dict(baris) if baris else None
+
+
+def catat_sumber(path: str, ukuran: int, mtime: float) -> None:
+    with koneksi() as conn:
+        conn.execute(
+            "INSERT INTO sumber_selesai (path, ukuran, mtime) VALUES (?, ?, ?) "
+            "ON CONFLICT(path) DO UPDATE SET ukuran = excluded.ukuran, mtime = excluded.mtime",
+            (path, ukuran, mtime),
+        )
+
+
+def sumber_selesai() -> dict[str, tuple[int, float]]:
+    with koneksi() as conn:
+        return {b["path"]: (b["ukuran"], b["mtime"]) for b in conn.execute("SELECT * FROM sumber_selesai")}
 
 
 def foto_dari_path(local_path: str) -> dict | None:
@@ -621,6 +725,11 @@ def sertifikat_sesi(session_id: int) -> list[dict]:
         return [dict(b) for b in conn.execute(
             "SELECT * FROM sertifikat WHERE session_id = ? ORDER BY id", (session_id,)
         ).fetchall()]
+
+
+def hapus_sertifikat_sesi(session_id: int) -> None:
+    with koneksi() as conn:
+        conn.execute("DELETE FROM sertifikat WHERE session_id = ?", (session_id,))
 
 
 def sertifikat_tertunda() -> list[dict]:

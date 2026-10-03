@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Papan pantau, Pet Blessing Photobooth</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="ui.css">
+<script src="/tema.js"></script>
+<link rel="stylesheet" href="/pb/tema.css">
+<link rel="stylesheet" href="pilah.css">
+</head>
+<body data-pantau>
+<div class="p-halaman">
+
+  <header class="p-atas">
+    <div class="brand"><span class="mark" aria-hidden="true"></span> <span data-merek>MCF Photobooth</span></div>
+    <div>
+      <h1 class="page-title" style="margin:0">Papan pantau foto dan sertifikat</h1>
+      <p class="page-sub" style="margin:2px 0 0">Urutan sesi foto, yang terbaru di atas. Cocokkan dengan folder di Drive.</p>
+    </div>
+  </header>
+
+  <div class="p-ringkas" data-ringkas aria-live="polite"></div>
+
+  <section class="card">
+    <div class="p-kepala">
+      <h2 class="h2">Sudah dipilah</h2>
+      <span class="small muted" data-papan-jumlah></span>
+    </div>
+    <p class="small muted" data-papan-kosong>Belum ada hewan yang dipilah.</p>
+    <div class="p-gulir">
+    <table class="p-tabel">
+      <thead><tr><th>No.</th><th>Hewan</th><th>Kamera</th><th>Foto</th><th>Sertifikat</th><th>Folder di Drive</th></tr></thead>
+      <tbody data-papan></tbody>
+    </table>
+    </div>
+  </section>
+
+</div>
+<script src="pilah.js"></script>
+</body>
+</html>

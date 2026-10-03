@@ -20,6 +20,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import shutil
 import time
 from contextlib import asynccontextmanager
@@ -38,7 +39,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from sse_starlette.sse import EventSourceResponse  # noqa: E402
 
-from . import db, drive_client, peristiwa, petblessing, qr, sertifikat, watcher  # noqa: E402
+from . import db, drive_client, peristiwa, petblessing, pilah, qr, sertifikat, watcher  # noqa: E402
 
 VERSI = "1.1.0"
 
@@ -205,6 +206,89 @@ def pb_pemilik(kode: str = Query(..., min_length=8, max_length=64)):
     for h in pemilik["hewan"]:
         h["sertifikat"] = sudah.get(h["id"])
     return {**pemilik, "dari_salinan": dari_salinan}
+
+
+# --------------------------------------------------------------- Meja pilah
+# Foto dijepret dulu (masuk '!Need Organized'), dipilah belakangan (app/pilah.py).
+
+
+class PilahBerkas(BaseModel):
+    file_ids: list[str] = Field(..., min_length=1, max_length=300)
+
+
+class PilahTetapkan(PilahBerkas):
+    owner_id: str = Field(..., max_length=64)
+    pet_id: str = Field(..., max_length=64)
+    terbaik: str | None = Field(None, max_length=120)
+
+
+def _harus_pb() -> None:
+    if not petblessing.AKTIF:
+        raise db.GalatDB("Mode Pet Blessing tidak aktif di laptop ini.", "bukan_mode_pb")
+
+
+@app.get("/api/pilah/kotak")
+def pilah_kotak():
+    """Foto yang belum dipilah, per kamera, urut jam mendarat."""
+    _harus_pb()
+    isi = pilah.kotak()
+    if isi is None:
+        raise db.GalatDB("Drive belum bisa dijangkau. Periksa internet laptop ini.", "drive_tidak_siap")
+    return {"booth": watcher.BOOTH_ID, "kamera": isi}
+
+
+@app.get("/api/pilah/thumb/{file_id}")
+def pilah_thumb(file_id: str):
+    path = pilah.thumb(file_id)
+    if not path:
+        raise db.GalatDB("Thumbnail belum ada.", "tidak_ada")
+    return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/api/pilah/cari")
+def pilah_cari(q: str = Query(..., min_length=1, max_length=80)):
+    """'27', '27a', atau nama pemilik -> pemilik beserta hewannya. Huruf di
+    belakang nomor langsung menunjuk hewannya."""
+    _harus_pb()
+    m = re.match(r"^\s*0*(\d{1,4})\s*([A-Za-z])?\s*$", q)
+    hasil, dari_salinan = petblessing.cari_nama(m.group(1) if m else q)
+    if m:
+        hasil = [o for o in hasil if str(o.get("nomor") or "") == m.group(1)]
+    sudah = db.sertifikat_per_hewan([h["id"] for o in hasil for h in o["hewan"]])
+    return {
+        "huruf": (m.group(2) or "").upper() if m else "",
+        "dari_salinan": dari_salinan,
+        "hasil": [{"id": o["id"], "nama": o["nama"], "nomor": o["nomor"], "uji": o["uji"],
+                   "hewan": [{"id": h["id"], "nama": h["nama"], "jenis": h["jenis"], "huruf": h["huruf"],
+                              "label": h["label"], "sudah": h["id"] in sudah} for h in o["hewan"]]}
+                  for o in hasil],
+    }
+
+
+@app.post("/api/pilah/tetapkan")
+def pilah_tetapkan(muatan: PilahTetapkan):
+    """Tombol Cetak sertifikat: foto pindah ke folder hewan, sertifikat dibuat."""
+    _harus_pb()
+    return pilah.tetapkan(muatan.file_ids, muatan.owner_id, muatan.pet_id, muatan.terbaik)
+
+
+@app.post("/api/pilah/sisihkan")
+def pilah_sisihkan(muatan: PilahBerkas):
+    _harus_pb()
+    return pilah.sisihkan(muatan.file_ids)
+
+
+@app.post("/api/pilah/batalkan/{sesi_id}")
+def pilah_batalkan(sesi_id: int):
+    _harus_pb()
+    return pilah.batalkan(sesi_id)
+
+
+@app.get("/api/pilah/papan")
+def pilah_papan():
+    """Papan pantau untuk monitor kedua dan meja pilah."""
+    _harus_pb()
+    return pilah.papan()
 
 
 @app.post("/api/sessions/{sesi_id}/sertifikat", status_code=202)

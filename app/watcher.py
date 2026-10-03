@@ -73,6 +73,9 @@ UPLOAD_PARALEL = max(1, env_int("UPLOAD_PARALEL", 3))
 # Kode laptop booth (K1, K2). Jadi awalan nama berkas di Drive supaya dua kamera
 # yang sama-sama menghasilkan DSC00012.JPG tidak dianggap berkas yang sama.
 BOOTH_ID = os.environ.get("BOOTH_ID", "").strip()
+# Kotak masuk: foto yang dijepret tanpa sesi dicatat di sesi semu berkode ini
+# dan naik ke Drive '!Need Organized/Camera <BOOTH_ID>', lalu dipilah di meja pilah.
+KODE_KOTAK = "_kotak_masuk"
 
 _observer: Observer | None = None
 _berjalan = False
@@ -181,13 +184,28 @@ def nama_thumb(local_path: str) -> str:
     return Path(local_path).stem + ".jpg"
 
 
+def kotak_aktif() -> bool:
+    """Mode Pet Blessing dengan BOOTH_ID: foto tanpa sesi masuk kotak masuk."""
+    from . import petblessing
+    return petblessing.AKTIF and bool(BOOTH_ID)
+
+
+def kotak_masuk() -> dict:
+    return db.buat_sesi_selesai(f"Kotak masuk Camera {BOOTH_ID}", None, kode=f"{KODE_KOTAK}_{BOOTH_ID}")
+
+
+def bukan_sesi_jepret(sesi: dict) -> bool:
+    """Kotak masuk dan sesi hasil pemilahan tidak pernah menerima jepretan baru."""
+    return sesi["session_code"].startswith(KODE_KOTAK) or bool((sesi.get("pb") or {}).get("pilah"))
+
+
 def _sesi_tujuan() -> tuple[dict | None, str]:
     """Sesi yang harus menerima foto baru, beserta alasannya."""
     sesi = db.sesi_aktif()
     if sesi:
         return sesi, "aktif"
     terakhir = db.sesi_terakhir_selesai()
-    if terakhir and terakhir.get("finished_at"):
+    if terakhir and terakhir.get("finished_at") and not bukan_sesi_jepret(terakhir):
         try:
             selesai = datetime.fromisoformat(terakhir["finished_at"])
             umur = (datetime.now().astimezone() - selesai).total_seconds()
@@ -195,6 +213,8 @@ def _sesi_tujuan() -> tuple[dict | None, str]:
                 return terakhir, "tenggang"
         except ValueError:
             pass
+    if kotak_aktif():
+        return kotak_masuk(), "kotak"
     return None, "tanpa_sesi"
 
 
@@ -232,8 +252,9 @@ def pasang_drive(sesi: dict) -> dict | None:
     thread yang memanggilnya bersamaan, folder hanya dibuat sekali.
 
     Returns sesi yang sudah diperbarui, atau None kalau Drive belum bisa."""
+    kotak = sesi["session_code"].startswith(KODE_KOTAK)
     if sesi.get("drive_folder_id"):
-        return pastikan_qr(sesi)
+        return sesi if kotak else pastikan_qr(sesi)
 
     with _kunci_sesi(sesi["id"]):
         try:
@@ -241,7 +262,15 @@ def pasang_drive(sesi: dict) -> dict | None:
         except db.GalatDB:
             return None
         if sesi.get("drive_folder_id"):
-            return pastikan_qr(sesi)
+            return sesi if kotak else pastikan_qr(sesi)
+        if kotak:
+            fid = drive_client.folder_kotak(sesi["session_code"][len(KODE_KOTAK) + 1:])
+            if not fid:
+                return None
+            db.simpan_drive_info(sesi["id"], fid, f"https://drive.google.com/drive/folders/{fid}")
+            baru = db.ambil_sesi(sesi["id"])
+            _antre_sisa(baru)
+            return baru
 
         pb = sesi.get("pb")
         if pb and pb.get("label"):
@@ -330,6 +359,11 @@ def _proses_foto(path: Path) -> bool:
             _sedang_diproses.discard(kunci_path)
             if beres:
                 _sumber_selesai[kunci_path] = _identitas(path) or identitas or (0, 0.0)
+    if beres:
+        try:
+            db.catat_sumber(kunci_path, *_sumber_selesai[kunci_path])
+        except Exception as e:  # pragma: no cover
+            log.warning("Gagal mengingat berkas sumber %s: %s", path.name, e)
     return beres
 
 
@@ -359,6 +393,10 @@ def _proses_foto_inti(path: Path) -> bool:
     session_code, session_id = sesi["session_code"], sesi["id"]
     archive_dir = ARCHIVE_DIR / session_code
     archive_dir.mkdir(parents=True, exist_ok=True)
+    if alasan == "kotak":
+        # Jam mendarat di depan nama: urutan jepret terbaca di Drive dan di meja
+        # pilah, dan penomoran kamera yang kembali ke awal tidak bentrok.
+        nama = f"{datetime.fromtimestamp(_waktu_mendarat(path)):%H%M%S}_{nama}"
     dest = archive_dir / nama
 
     tercatat = db.foto_dari_path(str(dest))
@@ -496,6 +534,16 @@ def mulai() -> bool:
 
     if _berjalan:
         return True
+    if kotak_aktif() and not db.ambil_pengaturan("kotak_dasar_at"):
+        # Pertama kali mode kotak masuk dipakai: foto lama di folder tether
+        # (uji coba, acara sebelumnya) tidak ikut masuk kotak.
+        for p in TETHER_DIR.rglob("*"):
+            ident = _identitas(p) if p.is_file() and p.suffix.lower() in FOTO_EXT else None
+            if ident:
+                db.catat_sumber(str(p), *ident)
+        db.simpan_pengaturan("kotak_dasar_at", db.sekarang())
+    with _kunci:
+        _sumber_selesai.update(db.sumber_selesai())
     try:
         _observer = Observer()
         _observer.schedule(_PemantauFoto(), str(TETHER_DIR), recursive=True)
@@ -533,7 +581,11 @@ def _batas_waktu_tether() -> float | None:
     """Berkas di tether_dropbox yang lebih tua dari batas ini dianggap milik
     acara sebelumnya. Aplikasi tethering menumpuk semua jepretan di folder itu
     dan watcher tidak pernah menghapus, jadi tanpa batas ini restart di tengah
-    acara akan menempelkan ratusan foto lama ke sesi yang sedang berjalan."""
+    acara akan menempelkan ratusan foto lama ke sesi yang sedang berjalan.
+    Di mode kotak masuk batas ini tidak dipakai: berkas yang sudah beres
+    diingat di database, sisanya memang harus diambil."""
+    if kotak_aktif():
+        return None
     sesi = db.sesi_aktif() or db.sesi_terakhir_selesai()
     if not sesi:
         return None
@@ -603,7 +655,7 @@ def pulihkan() -> dict:
 
     tertinggal = berkas_menunggu()
     diproses = 0
-    if tertinggal and db.sesi_aktif():
+    if tertinggal and (db.sesi_aktif() or kotak_aktif()):
         for p in tertinggal:
             threading.Thread(target=_aman, args=(_proses_foto, p), daemon=True).start()
             diproses += 1
@@ -619,7 +671,7 @@ def _penjaga() -> None:
     ulangi upload yang gagal/menggantung begitu Drive terjangkau."""
     while not _penjaga_stop.wait(PENJAGA_DETIK):
         try:
-            if db.sesi_aktif():
+            if db.sesi_aktif() or kotak_aktif():
                 for p in berkas_menunggu():
                     threading.Thread(target=_aman, args=(_proses_foto, p), daemon=True).start()
             sisa = db.sesi_dengan_sisa()

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meja pilah, Pet Blessing Photobooth</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="ui.css">
+<script src="/tema.js"></script>
+<link rel="stylesheet" href="/pb/tema.css">
+<link rel="stylesheet" href="pilah.css">
+</head>
+<body>
+<div class="p-halaman">
+
+  <header class="p-atas">
+    <div class="brand"><span class="mark" aria-hidden="true"></span> <span data-merek>MCF Photobooth</span></div>
+    <div>
+      <h1 class="page-title" style="margin:0">Meja pilah</h1>
+      <p class="page-sub" style="margin:2px 0 0">Pilih foto, ketik nomor urut, tekan Cetak sertifikat.</p>
+    </div>
+    <nav aria-label="Halaman lain">
+      <a href="pilah.html" aria-current="page">Meja pilah</a>
+      <a href="pantau.html" target="_blank" rel="noopener">Papan pantau</a>
+      <a href="index.html">Sesi</a>
+      <a href="riwayat.html">Riwayat</a>
+      <a href="pengaturan.html">Pengaturan</a>
+    </nav>
+  </header>
+
+  <div class="p-ringkas" data-ringkas aria-live="polite"></div>
+
+  <div class="p-tata">
+    <div data-kotak></div>
+
+    <aside class="p-panel">
+      <div class="card">
+        <span class="p-langkah">1. Foto</span>
+        <p class="p-info" data-foto-terpilih></p>
+      </div>
+      <div class="card">
+        <span class="p-langkah">2. Hewan</span>
+        <label class="field-label" for="cariHewan">Nomor urut di stiker, misalnya 27a</label>
+        <input class="input" id="cariHewan" type="text" placeholder="27a atau nama pemilik" autocomplete="off" spellcheck="false" maxlength="80" style="width:100%">
+        <p class="field-hint" data-petunjuk aria-live="polite"></p>
+        <div data-hasil></div>
+        <div class="p-terpilih" data-terpilih hidden></div>
+      </div>
+      <div class="card">
+        <span class="p-langkah">3. Selesai</span>
+        <button class="btn btn-primary p-cetak" type="button" data-cetak>Cetak sertifikat</button>
+        <p class="p-alasan" data-alasan aria-live="polite"></p>
+        <button class="btn btn-sm btn-quiet p-sisih" type="button" data-sisih style="margin-top:10px">Sisihkan foto terpilih</button>
+        <p class="small muted" style="margin-top:8px">Sisihkan dipakai untuk jepretan uji atau foto yang bukan foto hewan. Fotonya tidak dihapus.</p>
+      </div>
+    </aside>
+  </div>
+
+  <section class="card" style="margin-top:20px">
+    <div class="p-kepala">
+      <h2 class="h2">Sudah dipilah</h2>
+      <span class="small muted" data-papan-jumlah></span>
+    </div>
+    <p class="small muted" data-papan-kosong>Belum ada. Hewan yang sudah dipilah muncul di sini, yang terbaru di atas.</p>
+    <div class="p-gulir">
+    <table class="p-tabel">
+      <thead><tr><th>No.</th><th>Hewan</th><th>Kamera</th><th>Foto</th><th>Sertifikat</th><th>Folder di Drive</th><th></th></tr></thead>
+      <tbody data-papan></tbody>
+    </table>
+    </div>
+  </section>
+
+</div>
+<script src="pilah.js"></script>
+</body>
+</html>

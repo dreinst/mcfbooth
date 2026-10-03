@@ -604,3 +604,6 @@ hr.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
 [data-sesi-pb] .photo { cursor: pointer; }
 .pb-hewan { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; text-align: left; }
 .pb-hewan .small { font-weight: 500; }
+
+/* Tautan yang hanya ada di mode Pet Blessing (meja pilah). */
+html:not([data-pb]) [data-hanya-pb] { display: none; }
