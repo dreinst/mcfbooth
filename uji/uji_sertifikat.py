@@ -92,7 +92,7 @@ def main() -> int:
     threading.Thread(target=pg.serve_forever, daemon=True).start()
 
     import os
-    os.environ.update({"PHOTOBOOTH_MODE": "petblessing", "PETBLESSING_API_URL": f"http://127.0.0.1:{pg_port}",
+    os.environ.update({"PHOTOBOOTH_MODE": "petblessing", "PETBLESSING_API_URL": f"http://127.0.0.1:1,http://127.0.0.1:{pg_port}",
                        "PETBLESSING_BOOTH_TOKEN": TOKEN, "PETBLESSING_TIMEOUT": "2"})
 
     with tempfile.TemporaryDirectory() as tmp:

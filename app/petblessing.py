@@ -40,7 +40,11 @@ if MODE not in ("mcfbooth", "petblessing"):
     log.warning("PHOTOBOOTH_MODE=%s tidak dikenal, dipakai mcfbooth.", MODE)
     MODE = "mcfbooth"
 AKTIF = MODE == "petblessing"
-API = os.environ.get("PETBLESSING_API_URL", "").strip().rstrip("/")
+# Boleh beberapa alamat server yang sama dipisah koma (alamat wifi, alamat
+# Tailscale): yang pertama menjawab dipakai, jadi booth tidak bergantung pada
+# satu jalur jaringan.
+API_CALON = [u.strip().rstrip("/") for u in os.environ.get("PETBLESSING_API_URL", "").split(",") if u.strip()]
+API = API_CALON[0] if API_CALON else ""
 TOKEN = os.environ.get("PETBLESSING_BOOTH_TOKEN", "").strip()
 TIMEOUT = env_float("PETBLESSING_TIMEOUT", 6)
 
@@ -55,8 +59,25 @@ def siap() -> bool:
 
 
 def _minta(metode: str, jalur: str, badan: dict | None = None) -> object:
+    global API
+    for calon in [API] + [u for u in API_CALON if u != API]:
+        try:
+            hasil = _minta_ke(calon, metode, jalur, badan)
+        except urllib.error.HTTPError:
+            raise  # server menjawab; pindah alamat tidak menolong
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            galat = e
+            continue
+        if calon != API:
+            log.warning("Server pendaftaran pindah alamat: %s", calon)
+            API = calon
+        return hasil
+    raise galat
+
+
+def _minta_ke(api: str, metode: str, jalur: str, badan: dict | None = None) -> object:
     data = json.dumps(badan).encode() if badan is not None else None
-    req = urllib.request.Request(f"{API}/{jalur}", data=data, method=metode, headers={
+    req = urllib.request.Request(f"{api}/{jalur}", data=data, method=metode, headers={
         "Authorization": f"Bearer {TOKEN}",
         "Content-Type": "application/json",
         "Accept": "application/json",
