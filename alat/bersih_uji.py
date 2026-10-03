@@ -79,16 +79,12 @@ def isi(folder: str, q: str = "") -> list[dict]:
 
 
 buang: list[dict] = []
-for label, akar in (("Raw", d.FOLDER_RAW_ID), ("Sertifikat", d.FOLDER_SERTIFIKAT_ID)):
+cetak = d.folder_siap_cetak()   # folder siap cetak memakai susunan folder pemilik yang sama
+for label, akar in (("Raw", d.FOLDER_RAW_ID), ("Sertifikat", d.FOLDER_SERTIFIKAT_ID), *((("Siap cetak", cetak["id"]),) if cetak else ())):
     for f in isi(akar, "and name contains 'Testing'"):
         if POLA_FOLDER.match(f["name"]):
             buang.append(f)
             print(f"folder uji: {label} / {f['name']}")
-# PDF peserta uji di folder siap cetak (berkasnya memuat nama pemilik uji, misalnya ..._Testing_Nomor_1.pdf).
-cetak = d.folder_siap_cetak()
-for f in (isi(cetak["id"], "and name contains 'Testing'") if cetak else []):
-    buang.append(f)
-    print(f"siap cetak: {f['name']}")
 for kam in ([] if ACARA_JALAN else d.kamera_kotak() or []):
     for f in isi(kam["id"]):
         if f["mimeType"] == d.MIME_FOLDER:

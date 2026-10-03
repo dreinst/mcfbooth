@@ -925,10 +925,11 @@ _siap_cetak_isi: tuple[float, list] | None = None
 
 
 def folder_siap_cetak() -> dict | None:
-    """Folder datar berisi PDF sertifikat untuk dicetak fisik, di folder "Hari H" (induk folder Sertifikat
-    panitia), di samping susunan folder per pemilik yang sudah ada. Nama berkasnya diawali nomor urut
-    ('027A_...pdf'), jadi daftarnya urut nomor. {} kalau fitur ini tidak dipakai (tanpa folder Sertifikat
-    panitia, atau Drive palsu untuk uji), None kalau Drive tidak menjawab."""
+    """Folder "siap cetak" di folder "Hari H" (induk folder Sertifikat panitia): salinan PDF tiap sertifikat untuk
+    dicetak fisik, di samping susunan folder yang sudah ada. Susunannya sama dengan folder lain: satu folder per
+    pemilik ("027 Nama Pemilik", nomor urut di depan), di dalamnya satu folder per hewan ("027A Nama Hewan (Jenis)").
+    {} kalau fitur ini tidak dipakai (tanpa folder Sertifikat panitia, atau Drive palsu untuk uji), None kalau
+    Drive tidak menjawab."""
     if PALSU or not FOLDER_SERTIFIKAT_ID:
         return {}
     if _siap_cetak:
@@ -950,16 +951,70 @@ def folder_siap_cetak() -> dict | None:
         return None
 
 
+# PDF siap cetak ditandai properti ini, supaya jumlahnya bisa dihitung dengan satu pencarian walaupun
+# berkasnya tersebar di folder pemilik dan hewan.
+_TANDA_CETAK = "properties has { key='siap_cetak' and value='1' }"
+
+
+def upload_siap_cetak(pdf_lokal: str, nama_pemilik: str, nama_hewan: str) -> dict | None:
+    """Salin PDF sertifikat ke folder siap cetak / pemilik / hewan. PDF lama hewan itu diganti.
+    {} = fitur tidak dipakai, None = belum berhasil (pemanggil mengulang)."""
+    global _siap_cetak_isi
+    akar = folder_siap_cetak()
+    if not akar:
+        return akar
+    try:
+        svc = _svc()
+        pemilik = _folder_pemilik(svc, akar["id"], nama_pemilik)
+        hewan = pemilik and _folder_pemilik(svc, pemilik, nama_hewan)
+        hasil = hewan and upload_sertifikat(pdf_lokal, cek_dulu=True, folder_id=hewan)
+        if not hasil:
+            return None
+        svc.files().update(fileId=hasil["id"], body={"properties": {"siap_cetak": "1"}}, fields="id").execute()
+        _siap_cetak_isi = None
+        return hasil
+    except Exception as e:
+        log.warning("PDF siap cetak %s belum naik: %s", Path(pdf_lokal).name, str(e)[:160])
+        return None
+
+
 def isi_siap_cetak() -> list[dict] | None:
-    """PDF di folder siap cetak, urut nama (= urut nomor urut). None = Drive tidak terjangkau atau fitur mati."""
+    """Semua PDF siap cetak di Drive (dari semua laptop), urut nama = urut nomor urut. None = tidak terbaca."""
     global _siap_cetak_isi
     if _siap_cetak_isi and time.time() - _siap_cetak_isi[0] < 3:
         return _siap_cetak_isi[1]
-    folder = folder_siap_cetak()
-    isi = isi_folder(folder["id"]) if folder else None
-    if isi is not None:
-        _siap_cetak_isi = (time.time(), isi)
-    return isi
+    if not folder_siap_cetak():
+        return None
+    try:
+        svc = _svc()
+        hasil, token = [], None
+        while True:
+            res = svc.files().list(q=f"{_TANDA_CETAK} and trashed=false", fields="nextPageToken, files(id,name)",
+                                   pageSize=1000, pageToken=token).execute()
+            hasil += res.get("files", [])
+            token = res.get("nextPageToken")
+            if not token:
+                break
+        hasil.sort(key=lambda b: b["name"])
+        _siap_cetak_isi = (time.time(), hasil)
+        return hasil
+    except Exception as e:
+        log.warning("Gagal membaca PDF siap cetak: %s", str(e)[:160])
+        return None
+
+
+def buang_siap_cetak(nama_pdf: str) -> None:
+    """Buang PDF siap cetak bernama ini (pemilahan dibatalkan), supaya tidak tercetak."""
+    global _siap_cetak_isi
+    if not folder_siap_cetak():
+        return
+    try:
+        svc = _svc()
+        for b in svc.files().list(q=f"name='{_aman_q(nama_pdf)}' and {_TANDA_CETAK} and trashed=false", fields="files(id)").execute().get("files", []):
+            svc.files().update(fileId=b["id"], body={"trashed": True}).execute()
+        _siap_cetak_isi = None
+    except Exception as e:
+        log.warning("PDF siap cetak %s belum terbuang: %s", nama_pdf, str(e)[:160])
 
 
 def upload_sertifikat(path_lokal: str, cek_dulu: bool = False, folder_id: str | None = None) -> dict | None:

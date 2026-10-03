@@ -265,11 +265,8 @@ def batalkan(sesi_id: int) -> dict:
                 if salinan and salinan != "ada":
                     drive_client.buang_berkas(salinan)
             # PDF di folder siap cetak ikut dibuang, supaya sertifikat yang dibatalkan tidak tercetak.
-            cetak = None if lain else drive_client.folder_siap_cetak()
-            if cetak:
-                salinan = drive_client.cari_berkas(cetak["id"], srt["nama_berkas"] + ".pdf")
-                if salinan and salinan != "ada":
-                    drive_client.buang_berkas(salinan)
+            if not lain:
+                drive_client.buang_siap_cetak(srt["nama_berkas"] + ".pdf")
         db.hapus_sesi(sesi_id)
         _lupakan_cache()
     kolom = ({"certificate_url": lain["sertifikat"]["link_pdf"], "mcfbooth_session_code": lain["session_code"],
