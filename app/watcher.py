@@ -70,6 +70,9 @@ TENGGANG_SETELAH_SELESAI = env_float("TENGGANG_SETELAH_SELESAI", 45)
 # Penjaga latar dan pool upload.
 PENJAGA_DETIK = env_float("PENJAGA_DETIK", 30)
 UPLOAD_PARALEL = max(1, env_int("UPLOAD_PARALEL", 3))
+# Kode laptop booth (K1, K2). Jadi awalan nama berkas di Drive supaya dua kamera
+# yang sama-sama menghasilkan DSC00012.JPG tidak dianggap berkas yang sama.
+BOOTH_ID = os.environ.get("BOOTH_ID", "").strip()
 
 _observer: Observer | None = None
 _berjalan = False
@@ -433,7 +436,8 @@ def _upload_dengan_retry(foto_id: int, path: str, folder_id: str, session_id: in
     setelah percobaan terakhir; retry_count = jumlah pengulangan."""
     percobaan = len(RETRY_DELAYS) + 1
     for i in range(percobaan):
-        hasil = drive_client.upload_foto(path, folder_id, cek_dulu=i > 0)
+        hasil = drive_client.upload_foto(path, folder_id, cek_dulu=i > 0,
+                                         custom_name=f"{BOOTH_ID}_{Path(path).name}" if BOOTH_ID else None)
         if hasil:
             db.tandai_foto_uploaded(foto_id, hasil["id"])
             peristiwa.kirim({"jenis": "foto_uploaded", "session_id": session_id,

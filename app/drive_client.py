@@ -64,6 +64,7 @@ NAMA_FOLDER_RESULT = os.environ.get("DRIVE_FOLDER_RESULT", "2. Result").strip()
 NAMA_FOLDER_SERTIFIKAT = os.environ.get("DRIVE_FOLDER_SERTIFIKAT", "3. Sertifikat").strip() or "3. Sertifikat"
 HTTP_TIMEOUT = env_float("DRIVE_HTTP_TIMEOUT", 20)
 LOGIN_TIMEOUT = env_float("DRIVE_LOGIN_TIMEOUT", 240)
+JEDA_CEK_KEMBAR = env_float("DRIVE_JEDA_CEK_KEMBAR", 1.5)
 PALSU = env_bool("MCF_DRIVE_PALSU", False)
 # Mode palsu: kalau berkas ini ada, semua operasi Drive gagal seolah wifi putus.
 PALSU_SAKLAR_MATI = path_env("MCF_DRIVE_PALSU_SAKLAR", AKAR / "drive-palsu-mati")
@@ -633,6 +634,30 @@ def _cari_palsu(parent: str, nama: str) -> str | None:
     return next((k for k, f in _palsu.folder.items() if f["nama"] == nama and f["parent"] == parent), None)
 
 
+def _tanpa_kembar(svc, parent: str, nama: str, fid: str) -> str:
+    """Kunci di modul ini hanya berlaku di satu laptop. Dua booth yang mulai
+    bersamaan bisa sama-sama membuat folder bernama sama, jadi setelah membuat
+    folder dicek ulang: yang paling tua dipakai, folder baru milik sendiri
+    (masih kosong) dibuang ke Sampah."""
+    if PALSU:
+        with _palsu.kunci:
+            kembar = [k for k, f in _palsu.folder.items() if f["nama"] == nama and f["parent"] == parent]
+            if kembar[0] != fid:
+                del _palsu.folder[fid]
+        return kembar[0]
+    time.sleep(JEDA_CEK_KEMBAR)  # beri waktu folder booth lain muncul di pencarian
+    res = svc.files().list(
+        q=f"'{_aman_q(parent)}' in parents and name='{_aman_q(nama)}' and mimeType='{MIME_FOLDER}' and trashed=false",
+        fields="files(id,createdTime)",
+    ).execute()
+    kembar = sorted(res.get("files", []), key=lambda f: (f["createdTime"], f["id"]))
+    if not kembar or kembar[0]["id"] == fid:
+        return fid
+    svc.files().update(fileId=fid, body={"trashed": True}).execute()
+    log.warning("Folder '%s' sudah dibuat booth lain; dipakai yang itu, folder kembar dibuang.", nama)
+    return kembar[0]["id"]
+
+
 def _folder_pemilik(svc, parent: str, nama: str, lama: str | None = None) -> str | None:
     """Folder pengelompokan per pemilik di bawah '2. Result'. Dicari dulu
     (cache di pengaturan, lalu Drive) supaya hewan kedua pemilik yang sama
@@ -645,8 +670,10 @@ def _folder_pemilik(svc, parent: str, nama: str, lama: str | None = None) -> str
         cari = (lambda n: _cari_palsu(parent, n)) if PALSU else (lambda n: _cari_subfolder(svc, parent, n))
         # Folder nomor pendaftaran dicari lebih dulu: nama nomor urut bisa kebetulan sama
         # dengan folder pendaftaran pemilik lain yang bernama sama (dua "Lita").
-        fid = (lama and lama != nama and _ganti_nama(svc, cari(lama), nama)) or cari(nama) \
-            or (_palsu.buat_folder(nama, parent)["id"] if PALSU else _buat_folder(svc, nama, parent)["id"])
+        fid = (lama and lama != nama and _ganti_nama(svc, cari(lama), nama)) or cari(nama)
+        if not fid:
+            baru = _palsu.buat_folder(nama, parent) if PALSU else _buat_folder(svc, nama, parent)
+            fid = _tanpa_kembar(svc, parent, nama, baru["id"])
         db.simpan_pengaturan(kunci_cache, fid)
         return fid
 
@@ -692,6 +719,9 @@ def buat_folder_sesi(nama_folder: str, induk: str | None = None,
 
         folder = _buat_folder(svc, nama_folder, parent)
         folder_id, folder_link = folder["id"], folder["webViewLink"]
+        if induk:
+            folder_id = _tanpa_kembar(svc, parent, nama_folder, folder_id)
+            folder_link = f"https://drive.google.com/drive/folders/{folder_id}"
         svc.permissions().create(
             fileId=folder_id, body={"type": "anyone", "role": "reader"}, fields="id",
         ).execute()

@@ -26,4 +26,14 @@ ok.append(nama(srt) == "152 Lita" and sum(1 for x in P.folder.values() if x["par
 # Sesi kedua hewan yang sama: tidak membuat folder baru.
 f2 = d.buat_folder_sesi(pb.folder_hewan(s1), pb.folder_pemilik(s1), pb.folder_hewan(s1, True), pb.folder_pemilik(s1, True))
 ok.append(f2["id"] == f["id"])
+# Dua laptop booth: booth lain lebih dulu membuat "007 Walk In"; folder buatan sendiri dibuang.
+lain = P.buat_folder("007 Walk In", "palsu-raw")["id"]; punya = P.buat_folder("007 Walk In", "palsu-raw")["id"]
+ok.append(d._tanpa_kembar(None, "palsu-raw", "007 Walk In", punya) == lain and punya not in P.folder)
+ok.append(d._tanpa_kembar(None, "palsu-raw", "007 Walk In", lain) == lain and lain in P.folder)
+# BOOTH_ID jadi awalan nama berkas di Drive.
+from app import watcher as w
+w.BOOTH_ID = "K1"; w.db.tandai_foto_uploaded = lambda *a: None; w.peristiwa.kirim = lambda *a, **k: None
+src = tempfile.mktemp(suffix=".JPG"); open(src, "w").close()
+w._upload_dengan_retry(1, src, f["id"], 1)
+ok.append(P.berkas[f["id"]] == ["K1_" + os.path.basename(src)])
 print(ok); sys.exit(0 if all(ok) else 1)
