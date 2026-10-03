@@ -261,7 +261,11 @@ def _svc():
         from google_auth_httplib2 import AuthorizedHttp
         from googleapiclient.discovery import build
 
-        http = AuthorizedHttp(creds, http=httplib2.Http(timeout=HTTP_TIMEOUT))
+        dasar = httplib2.Http(timeout=HTTP_TIMEOUT)
+        # 308 dari Drive berarti "lanjutkan upload", bukan pindah alamat. Tanpa ini
+        # berkas yang lebih besar dari satu potongan (4 MB) selalu gagal diupload.
+        dasar.redirect_codes = dasar.redirect_codes - {308}
+        http = AuthorizedHttp(creds, http=dasar)
         svc = build("drive", "v3", http=http, cache_discovery=False)
         _lokal.svc = svc
         _lokal.creds = creds
