@@ -42,6 +42,48 @@
     setTimeout(function () { t.remove(); }, 4500);
   }
 
+  /* Kabar sertifikat: muncul begitu sertifikat selesai dibuat dan sudah naik ke Drive (atau gagal). Berbeda dengan
+     toast, kabar ini bertumpuk dan bertahan lebih lama, supaya admin yang sedang memilah hewan berikutnya tetap melihatnya. */
+  var SRT = null;   // id sesi -> keadaan sertifikat terakhir yang sudah dilihat halaman ini
+  function bunyi(ok) {
+    try {
+      var A = window.AudioContext || window.webkitAudioContext; if (!A) return;
+      var ctx = bunyi.ctx || (bunyi.ctx = new A()), o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = ok ? 880 : 220; g.gain.value = 0.08;
+      o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + (ok ? 0.18 : 0.4));
+    } catch (e) { /* browser belum mengizinkan suara sebelum ada klik */ }
+  }
+  function kabar(judul, isi, jenis, tautan) {
+    var wadah = $('.kabar-wadah');
+    if (!wadah) { wadah = el('div', { class: 'kabar-wadah', role: 'status', 'aria-live': 'polite' }); document.body.appendChild(wadah); }
+    var k = el('div', { class: 'kabar is-' + jenis }, [
+      el('strong', { text: judul }), el('div', { class: 'small', text: isi }),
+      tautan ? el('a', { href: tautan, target: '_blank', rel: 'noopener', text: 'Lihat sertifikat' }) : null,
+    ]);
+    var tutup = el('button', { class: 'kabar-tutup', type: 'button', 'aria-label': 'Tutup', text: '\u00d7' });
+    tutup.addEventListener('click', function () { k.remove(); });
+    k.appendChild(tutup);
+    wadah.appendChild(k);
+    setTimeout(function () { k.remove(); }, jenis === 'bad' ? 60000 : 20000);
+    bunyi(jenis !== 'bad');
+  }
+  function kabarSertifikat(sesi) {
+    var kini = {};
+    sesi.forEach(function (b) {
+      var st = b.tambahan ? 'tambahan' : (b.sertifikat || '') + (b.tercatat ? '+catat' : '');
+      kini[b.id] = st;
+      if (SRT === null || SRT[b.id] === st) return;
+      var lama = SRT[b.id] || '', nama = b.label + ' ' + (b.hewan || '');
+      if (b.sertifikat === 'uploaded' && lama.indexOf('uploaded') !== 0) {
+        kabar('Sertifikat ' + nama + ' sudah jadi', 'Sudah dibuat dan terupload di Drive' + (b.pemilik ? ', milik ' + b.pemilik : '') + '.', 'ok',
+          b.sertifikat_id ? '/api/sertifikat/' + b.sertifikat_id + '/berkas.png' : null);
+      } else if (b.sertifikat === 'failed' && lama !== 'failed') {
+        kabar('Sertifikat ' + nama + ' gagal dibuat', 'Batalkan lalu pilah ulang, atau pilih foto lain untuk sertifikatnya.', 'bad');
+      }
+    });
+    SRT = kini;   // muatan pertama hanya mencatat keadaan, tanpa kabar
+  }
+
   function chip(kelas, teks) {
     return el('span', { class: 'chip chip-' + kelas }, [el('span', { class: 'dot dot-' + kelas }), teks]);
   }
@@ -86,6 +128,7 @@
           + (gagal ? ', ' + gagal + ' gagal' : '')));
       }
     }
+    kabarSertifikat(d.sesi);
     var badan = $('[data-papan]');
     if (!badan) return;
     var tanda = JSON.stringify(d.sesi);
