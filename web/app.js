@@ -890,7 +890,7 @@
       if (s.drive_folder_link) {
         acts.appendChild(el('a', { class: 'btn btn-sm btn-quiet', href: s.drive_folder_link, target: '_blank', rel: 'noopener', text: 'Buka folder Drive' }));
       }
-      var qr = el('button', { class: 'btn btn-sm btn-primary', type: 'button', text: 'Tampilkan QR', 'data-butuh-server': '' });
+      var qr = el('button', { class: 'btn btn-sm btn-primary', type: 'button', text: document.documentElement.hasAttribute('data-pb') ? 'Tampilkan sertifikat' : 'Tampilkan QR', 'data-butuh-server': '' });
       var alasanQr = !s.drive_folder_link ? 'Belum ada folder Drive, jadi belum ada QR' : (s.status === 'active' ? 'Sesi ini sedang berjalan — QR tampil setelah Selesai' : '');
       if (alasanQr) { qr.setAttribute('aria-disabled', 'true'); acts.appendChild(el('p', { class: 'btn-reason is-quiet', style: 'flex-basis:100%;margin:0', text: alasanQr })); }
       qr.addEventListener('click', function () {
@@ -1027,6 +1027,9 @@
 
   /* ============================================================= layar tamu */
 
+  // Mode Pet Blessing tidak memakai QR: teks yang menyebut QR diganti.
+  if (document.documentElement.hasAttribute('data-pb')) $$('[data-teks-pb]').forEach(function (n) { n.textContent = n.getAttribute('data-teks-pb'); });
+
   (function halamanTamu() {
     var root = $('[data-tamu]');
     if (!root) return;
@@ -1060,10 +1063,11 @@
         pasangNama(e.qNama, t.nama_tamu); e.qJml.textContent = String(t.foto_count || 0);
         e.qStrip.textContent = ''; (t.fotos || []).forEach(function (f) { e.qStrip.appendChild(tile(t.session_code, f, false)); });
         e.qStrip.hidden = !(t.fotos && t.fotos.length);
-        if (t.qr_ada) {
+        // Pet Blessing: kartu ini berisi sertifikat, bukan QR.
+        var src = t.pb ? t.sertifikat : (t.qr_ada && '/api/qr/' + encodeURIComponent(t.session_code));
+        if (src) {
           e.qrCard.classList.remove('is-missing'); e.qrImg.hidden = false;
-          var src = '/api/qr/' + encodeURIComponent(t.session_code);
-          if (e.qrImg.getAttribute('data-kode') !== t.session_code) { e.qrImg.src = src; e.qrImg.setAttribute('data-kode', t.session_code); }
+          if (e.qrImg.getAttribute('data-kode') !== src) { e.qrImg.src = src; e.qrImg.setAttribute('data-kode', src); }
           $('[data-qr-teks]').hidden = true;
         } else { e.qrCard.classList.add('is-missing'); e.qrImg.hidden = true; $('[data-qr-teks]').hidden = false; }
         e.link.textContent = (t.drive_folder_link || '').replace(/^https?:\/\//, '');

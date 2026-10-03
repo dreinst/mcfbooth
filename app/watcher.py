@@ -261,7 +261,7 @@ def pasang_drive(sesi: dict) -> dict | None:
             log.warning("Folder Drive untuk %s sudah dipasang thread lain; folder %s dibiarkan.",
                         sesi["session_code"], folder["id"])
             return db.ambil_sesi(sesi["id"])
-        if qr_path:
+        if qr_path and not pb:  # Pet Blessing tidak memakai QR
             drive_client.upload_qr(qr_path, f"{sesi['session_code']}.png")
         if pb and pb.get("pet_id"):
             # Halaman hasil.html (QR poster) membuka folder ini; dicatat lagi bersama sertifikat.

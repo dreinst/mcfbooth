@@ -288,8 +288,15 @@ def ambil_sesi(sesi_id: int):
 
 @app.post("/api/sessions/{sesi_id}/finish")
 def akhiri_sesi(sesi_id: int):
-    """Selesai. QR ditampilkan di monitor tamu."""
+    """Selesai. QR ditampilkan di monitor tamu (Pet Blessing: sertifikat)."""
     sesi = db.akhiri_sesi(sesi_id)
+    if sesi.get("pb") and not db.sertifikat_sesi(sesi_id):
+        # Operator belum memilih foto: sertifikat dibuat dari jepretan terakhir,
+        # supaya tidak ada hewan yang pulang tanpa sertifikat.
+        jpeg = [f for f in db.daftar_foto(sesi_id)
+                if Path(f["local_path"]).suffix.lower() in (".jpg", ".jpeg") and Path(f["local_path"]).exists()]
+        if jpeg:
+            sertifikat.mulai(sesi, jpeg[-1])
     sesi = watcher.pastikan_qr(sesi)
     peristiwa.kirim({"jenis": "sesi_selesai", "sesi": sesi})
     return sesi
@@ -592,6 +599,10 @@ def _keadaan_qr(sesi: dict) -> dict:
         "session_code": sesi["session_code"],
         "drive_folder_link": sesi["drive_folder_link"],
         "qr_ada": bool(sesi.get("qr_path")) and Path(sesi["qr_path"]).exists(),
+        # Pet Blessing: layar tamu menampilkan sertifikat, bukan QR.
+        "pb": bool(sesi.get("pb")),
+        "sertifikat": next((f"/api/sertifikat/{s['id']}/berkas.png" for s in reversed(db.sertifikat_sesi(sesi["id"]))
+                            if s.get("png_path")), None) if sesi.get("pb") else None,
         # Tamu tidak boleh melihat status upload (design.md §5.2): angkanya
         # jumlah foto, sama seperti saat memotret — bukan yang sudah di Drive.
         "foto_count": hitung["total"],

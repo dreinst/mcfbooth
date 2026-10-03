@@ -68,3 +68,10 @@
 .pb-saran { display: grid; gap: 8px; margin-top: 10px; }
 .pb-saran .btn { justify-content: space-between; text-align: left; min-height: 52px; }
 .pb-saran .nomor { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); }
+
+/* Pet Blessing tidak memakai QR: layar tamu menampilkan sertifikat (A4 mendatar),
+   panel operator tanpa pratinjau dan unduhan QR. */
+[data-pb] .qr-card { width: 92vw; aspect-ratio: 3508 / 2480; padding: 1vw; border-radius: 2vw; }
+[data-pb] .qr-card img { image-rendering: auto; object-fit: contain; }
+[data-pb] .guest-instruction, [data-pb] .guest-link, [data-pb] .guest-foot { display: none; }
+[data-pb] .qr-preview, [data-pb] [data-qr-unduh] { display: none; }

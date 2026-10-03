@@ -151,6 +151,7 @@ def _render(sertifikat_id: int) -> None:
         return
     srt = db.ubah_sertifikat(sertifikat_id, png_path=png, pdf_path=pdf, status="menunggu", pesan=None)
     _kirim("sertifikat_siap", srt)
+    peristiwa.kirim({"jenis": "sertifikat_siap", "session_id": srt["session_id"]}, ke_operator=False)
     _upload(sertifikat_id)
 
 
