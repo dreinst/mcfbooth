@@ -184,6 +184,12 @@ def _upload(sertifikat_id: int) -> None:
                 salin = all(drive_client.upload_sertifikat(p, cek_dulu=True, folder_id=folder_hewan)
                             for p in (srt["png_path"], srt["pdf_path"]))
                 pdf = pdf if salin else None
+            # Salinan PDF di folder datar "siap cetak" untuk dicetak fisik. Kalau belum berhasil, sertifikat
+            # tetap berstatus menunggu dan dicoba lagi, supaya "Siap cetak" di layar selalu berarti PDF-nya ada di sana.
+            if png and pdf:
+                cetak = drive_client.folder_siap_cetak()
+                if cetak is None or (cetak and not drive_client.upload_sertifikat(srt["pdf_path"], cek_dulu=True, folder_id=cetak["id"])):
+                    pdf = None
             if png and pdf:
                 srt = db.ubah_sertifikat(sertifikat_id, drive_png_id=png["id"], link_png=png["link"],
                                          drive_pdf_id=pdf["id"], link_pdf=pdf["link"],

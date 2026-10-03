@@ -43,16 +43,10 @@
   }
 
   /* Kabar sertifikat: muncul begitu sertifikat selesai dibuat dan sudah naik ke Drive (atau gagal). Berbeda dengan
-     toast, kabar ini bertumpuk dan bertahan lebih lama, supaya admin yang sedang memilah hewan berikutnya tetap melihatnya. */
+     toast, kabar ini bertumpuk dan bertahan lebih lama, supaya admin yang sedang memilah hewan berikutnya tetap melihatnya.
+     Hanya tampil di layar, tanpa suara. */
   var SRT = null;   // id sesi -> keadaan sertifikat terakhir yang sudah dilihat halaman ini
-  function bunyi(ok) {
-    try {
-      var A = window.AudioContext || window.webkitAudioContext; if (!A) return;
-      var ctx = bunyi.ctx || (bunyi.ctx = new A()), o = ctx.createOscillator(), g = ctx.createGain();
-      o.frequency.value = ok ? 880 : 220; g.gain.value = 0.08;
-      o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + (ok ? 0.18 : 0.4));
-    } catch (e) { /* browser belum mengizinkan suara sebelum ada klik */ }
-  }
+  var CETAK = null; // keadaan folder siap cetak dari muatan papan terakhir
   function kabar(judul, isi, jenis, tautan) {
     var wadah = $('.kabar-wadah');
     if (!wadah) { wadah = el('div', { class: 'kabar-wadah', role: 'status', 'aria-live': 'polite' }); document.body.appendChild(wadah); }
@@ -65,19 +59,30 @@
     k.appendChild(tutup);
     wadah.appendChild(k);
     setTimeout(function () { k.remove(); }, jenis === 'bad' ? 60000 : 20000);
-    bunyi(jenis !== 'bad');
+  }
+  // PDF sesi ini sudah ada di folder siap cetak? null = fitur siap cetak tidak dipakai atau Drive belum terbaca.
+  function diCetak(b) {
+    if (!CETAK || CETAK.jumlah === null || !b.berkas) return null;
+    return CETAK.berkas.indexOf(b.berkas + '.pdf') >= 0;
+  }
+  function keadaan(b) {
+    if (b.tambahan) return 'tambahan';
+    if (b.sertifikat === 'failed') return 'failed';
+    if (b.sertifikat === 'uploaded') return diCetak(b) === false ? 'naik' : 'siap';
+    return b.sertifikat || '';
   }
   function kabarSertifikat(sesi) {
     var kini = {};
     sesi.forEach(function (b) {
-      var st = b.tambahan ? 'tambahan' : (b.sertifikat || '') + (b.tercatat ? '+catat' : '');
+      var st = keadaan(b);
       kini[b.id] = st;
       if (SRT === null || SRT[b.id] === st) return;
-      var lama = SRT[b.id] || '', nama = b.label + ' ' + (b.hewan || '');
-      if (b.sertifikat === 'uploaded' && lama.indexOf('uploaded') !== 0) {
-        kabar('Sertifikat ' + nama + ' sudah jadi', 'Sudah dibuat dan terupload di Drive' + (b.pemilik ? ', milik ' + b.pemilik : '') + '.', 'ok',
-          b.sertifikat_id ? '/api/sertifikat/' + b.sertifikat_id + '/berkas.png' : null);
-      } else if (b.sertifikat === 'failed' && lama !== 'failed') {
+      var nama = b.label + ' ' + (b.hewan || '');
+      if (st === 'siap') {
+        kabar('Sertifikat ' + nama + ' siap cetak',
+          (CETAK ? 'PDF sudah ada di folder ' + CETAK.nama + ' di Drive' : 'Sudah dibuat dan terupload di Drive') + (b.pemilik ? ', milik ' + b.pemilik : '') + '.', 'ok',
+          b.sertifikat_id ? '/api/sertifikat/' + b.sertifikat_id + '/berkas.pdf' : null);
+      } else if (st === 'failed') {
         kabar('Sertifikat ' + nama + ' gagal dibuat', 'Batalkan lalu pilah ulang, atau pilih foto lain untuk sertifikatnya.', 'bad');
       }
     });
@@ -101,6 +106,9 @@
     if (b.sertifikat === 'render') return chip('wait', 'Sedang dibuat');
     if (b.sertifikat === 'menunggu') return chip('wait', 'Dibuat, sedang naik ke Drive');
     if (b.sertifikat === 'failed') return chip('bad', 'Gagal dibuat');
+    var c = diCetak(b);
+    if (c === false) return chip('wait', 'Sudah di Drive, PDF siap cetak belum ada');
+    if (c === true) return chip('ok', b.tercatat ? 'Siap cetak, PDF di Drive' : 'Siap cetak, pencatatan menyusul');
     return chip('ok', b.tercatat ? 'Di Drive dan tercatat' : 'Di Drive, pencatatan menyusul');
   }
 
@@ -114,10 +122,11 @@
     // Halaman diperbarui dari jauh: muat ulang sendiri saat tidak ada pekerjaan yang sedang dipegang.
     if (S.versi && d.versi && d.versi !== S.versi && !S.sibuk && !S.pilih.length) { location.reload(); return; }
     S.versi = S.versi || d.versi;
+    CETAK = d.cetak || null;
     var ringkas = $('[data-ringkas]');
     if (ringkas) {
       ringkas.textContent = '';
-      if (!d.drive_ok) ringkas.appendChild(chip('bad', 'Drive tidak terjangkau'));
+      ringkas.appendChild(d.drive_ok ? chip('ok', 'Drive tersambung') : chip('bad', 'Drive tidak terjangkau'));
       d.kotak.forEach(function (k) {
         ringkas.appendChild(chip(k.jumlah ? 'wait' : 'ok', 'Camera ' + k.nama + ': ' + k.jumlah + ' foto belum dipilah'));
       });
@@ -128,10 +137,20 @@
           + (gagal ? ', ' + gagal + ' gagal' : '')));
       }
     }
+    if (ringkas && d.cetak) {
+      // Sertifikat yang sedang dibuat atau sedang naik di laptop ini, dan yang gagal.
+      var naik = d.sesi.filter(function (b) { var k = keadaan(b); return k === 'render' || k === 'menunggu' || k === 'naik'; }).length;
+      var gagalSrt = d.sesi.filter(function (b) { return keadaan(b) === 'failed'; }).length;
+      var teks = d.cetak.jumlah === null ? 'Folder siap cetak belum terbaca'
+        : 'Sertifikat siap cetak: ' + d.cetak.jumlah + ' PDF di Drive' + (naik ? ', ' + naik + ' sedang naik' : '') + (gagalSrt ? ', ' + gagalSrt + ' gagal' : '');
+      var tautan = el('a', { href: d.cetak.link, target: '_blank', rel: 'noopener', class: 'chip-tautan', title: 'Buka folder ' + d.cetak.nama + ' di Drive' },
+        [chip(d.cetak.jumlah === null || gagalSrt ? 'bad' : (naik ? 'wait' : 'ok'), teks)]);
+      ringkas.appendChild(tautan);
+    }
     kabarSertifikat(d.sesi);
     var badan = $('[data-papan]');
     if (!badan) return;
-    var tanda = JSON.stringify(d.sesi);
+    var tanda = JSON.stringify([d.sesi, d.cetak]);
     if (S.tanda.papan === tanda) return;
     S.tanda.papan = tanda;
     badan.textContent = '';

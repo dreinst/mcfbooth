@@ -264,6 +264,12 @@ def batalkan(sesi_id: int) -> dict:
                 salinan = drive_client.cari_berkas(sesi["drive_folder_id"], srt["nama_berkas"] + akhiran)
                 if salinan and salinan != "ada":
                     drive_client.buang_berkas(salinan)
+            # PDF di folder siap cetak ikut dibuang, supaya sertifikat yang dibatalkan tidak tercetak.
+            cetak = None if lain else drive_client.folder_siap_cetak()
+            if cetak:
+                salinan = drive_client.cari_berkas(cetak["id"], srt["nama_berkas"] + ".pdf")
+                if salinan and salinan != "ada":
+                    drive_client.buang_berkas(salinan)
         db.hapus_sesi(sesi_id)
         _lupakan_cache()
     kolom = ({"certificate_url": lain["sertifikat"]["link_pdf"], "mcfbooth_session_code": lain["session_code"],
@@ -292,12 +298,19 @@ def papan(limit: int = 300) -> dict:
             "folder": f"{petblessing.folder_pemilik(pb)} / {petblessing.folder_hewan(pb)}",
             "folder_link": s.get("drive_folder_link"), "pilah": bool(pb.get("pilah")), "tambahan": bool(pb.get("tambahan")),
             "berjalan": s["status"] == "active", "waktu": s.get("finished_at") or s["started_at"],
+            "berkas": srt.get("nama_berkas"),
         })
     isi = kotak()
+    folder_cetak = drive_client.folder_siap_cetak()
+    pdf_cetak = drive_client.isi_siap_cetak() if folder_cetak else None
     lokal = db.sesi_dari_kode(f"{watcher.KODE_KOTAK}_{watcher.BOOTH_ID}") if watcher.BOOTH_ID else None
     return {
         "booth": watcher.BOOTH_ID, "drive_ok": isi is not None, "sesi": baris,
         "kotak": [{"nama": k["nama"], "jumlah": len(k["berkas"])} for k in (isi or [])],
         # Foto kamera laptop ini yang belum dipilah: sudah masuk laptop, sudah naik, masih antre, gagal.
         "lokal": lokal["foto"] if lokal else None,
+        # Folder datar PDF untuk dicetak fisik: jumlah PDF yang benar-benar ada di Drive (dari semua laptop).
+        "cetak": ({"nama": drive_client.NAMA_SIAP_CETAK, "link": folder_cetak["link"],
+                   "jumlah": None if pdf_cetak is None else len(pdf_cetak),
+                   "berkas": [b["name"] for b in (pdf_cetak or [])]} if folder_cetak else None),
     }

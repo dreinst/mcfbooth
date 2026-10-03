@@ -919,6 +919,49 @@ def folder_sertifikat(nama_pemilik: str, folder_sesi: str | None, lama: str | No
         return None
 
 
+NAMA_SIAP_CETAK = os.environ.get("DRIVE_FOLDER_SIAP_CETAK", "").strip() or "Sertifikat Siap Cetak (PDF)"
+_siap_cetak: dict = {}   # {"id", "link"} folder siap cetak, diingat selama server hidup
+_siap_cetak_isi: tuple[float, list] | None = None
+
+
+def folder_siap_cetak() -> dict | None:
+    """Folder datar berisi PDF sertifikat untuk dicetak fisik, di folder "Hari H" (induk folder Sertifikat
+    panitia), di samping susunan folder per pemilik yang sudah ada. Nama berkasnya diawali nomor urut
+    ('027A_...pdf'), jadi daftarnya urut nomor. {} kalau fitur ini tidak dipakai (tanpa folder Sertifikat
+    panitia, atau Drive palsu untuk uji), None kalau Drive tidak menjawab."""
+    if PALSU or not FOLDER_SERTIFIKAT_ID:
+        return {}
+    if _siap_cetak:
+        return _siap_cetak
+    try:
+        svc = _svc()
+        if svc is None:
+            return None
+        induk = svc.files().get(fileId=FOLDER_SERTIFIKAT_ID, fields="parents").execute().get("parents", [None])[0]
+        if not induk:
+            return {}
+        fid = _folder_pemilik(svc, induk, NAMA_SIAP_CETAK)
+        if not fid:
+            return None
+        _siap_cetak.update(id=fid, link=f"https://drive.google.com/drive/folders/{fid}")
+        return _siap_cetak
+    except Exception as e:
+        log.warning("Gagal menyiapkan folder siap cetak: %s", str(e)[:160])
+        return None
+
+
+def isi_siap_cetak() -> list[dict] | None:
+    """PDF di folder siap cetak, urut nama (= urut nomor urut). None = Drive tidak terjangkau atau fitur mati."""
+    global _siap_cetak_isi
+    if _siap_cetak_isi and time.time() - _siap_cetak_isi[0] < 3:
+        return _siap_cetak_isi[1]
+    folder = folder_siap_cetak()
+    isi = isi_folder(folder["id"]) if folder else None
+    if isi is not None:
+        _siap_cetak_isi = (time.time(), isi)
+    return isi
+
+
 def upload_sertifikat(path_lokal: str, cek_dulu: bool = False, folder_id: str | None = None) -> dict | None:
     """Upload sertifikat Pet Blessing ke folder hewannya (`folder_id`, di
     dalam folder pemilik) atau, tanpa folder_id, ke subfolder '3. Sertifikat'.

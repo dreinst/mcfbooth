@@ -255,7 +255,7 @@ def _bentuk(conn: sqlite3.Connection, baris: sqlite3.Row) -> dict:
     d["foto_terakhir_at"] = terakhir["created_at"] if terakhir else None
     if d["pb"] is not None:
         srt = conn.execute(
-            "SELECT id, status, link_pdf, link_png, tercatat FROM sertifikat "
+            "SELECT id, status, link_pdf, link_png, tercatat, nama_berkas FROM sertifikat "
             "WHERE session_id = ? ORDER BY id DESC LIMIT 1", (baris["id"],),
         ).fetchone()
         d["sertifikat"] = dict(srt) if srt else None

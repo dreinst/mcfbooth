@@ -71,3 +71,5 @@ body[data-pantau] .p-folder { font-size: 15px; }
 .kabar a { display: inline-block; margin-top: 6px; color: var(--accent-strong); font-weight: 600; }
 .kabar-tutup { position: absolute; top: 6px; right: 10px; border: 0; background: none; font-size: 22px; line-height: 1; color: var(--ink-3); cursor: pointer; }
 body[data-pantau] .kabar { font-size: 18px; }
+.chip-tautan { text-decoration: none; }
+.chip-tautan:hover .chip { border-color: var(--line-strong); }
