@@ -64,7 +64,8 @@ try:
     p = json.loads(mentah)
     lok = p.get("lokal") or {}
     print(f"Camera {p['booth']}: {lok.get('total', 0)} foto belum dipilah di laptop, {lok.get('pending', 0)} sedang naik, {lok.get('failed', 0)} gagal")
-    soal = [s for s in p["sesi"] if s["foto_gagal"] or not (s["sertifikat"] == "uploaded" and s["tercatat"])]
+    # Sesi "tambahan" hanya menambah foto ke hewan yang sertifikatnya sudah ada.
+    soal = [s for s in p["sesi"] if s["foto_gagal"] or not (s.get("tambahan") or (s["sertifikat"] == "uploaded" and s["tercatat"]))]
     print(f"sudah dipilah: {len(p['sesi'])} hewan, {len(soal)} belum beres")
     for s in soal[:15]:
         print(f"  {s['label']} {s['hewan']}: foto {s['foto_drive']}/{s['foto']}, sertifikat {s['sertifikat'] or 'belum ada'}"
