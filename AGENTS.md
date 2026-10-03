@@ -43,6 +43,36 @@ Pemeriksaan cepat tanpa membaca kode:
 | Tampilan / tombol tidak sesuai | konsol browser (F12) | `web/*.html`, `web/app.js`, `web/ui.css`, tema Pet Blessing `web/pb/tema.css` |
 | Data sesi / riwayat aneh | SQLite lokal | `app/db.py`, berkas `sessions.db` |
 
+## Alur hari-H Pet Blessing: jepret dulu, pilah belakangan
+
+Fotografer tidak mengoperasikan laptop. Semua foto masuk kotak masuk dulu, lalu admin memilahnya.
+
+- Tiap laptop receiver punya `BOOTH_ID` di `.env` (`Ganjil` atau `Genap`). Foto yang datang tanpa sesi
+  aktif dicatat di sesi semu `_kotak_masuk_<BOOTH_ID>` dan naik ke Drive
+  `Raw/!Need Organized/Camera <BOOTH_ID>/<BOOTH_ID>_<jam mendarat>_<nama kamera>.JPG`
+  (`app/watcher.py`: `kotak_aktif`, `kotak_masuk`, `_sesi_tujuan`).
+- Meja pilah (`/pilah.html`, `web/pilah.js`, `app/pilah.py`) membaca kotak masuk SEMUA kamera dari Drive,
+  jadi satu meja memilah foto dari semua laptop. Tombol Cetak sertifikat = `POST /api/pilah/tetapkan`:
+  foto pindah ke folder hewan (ID dan tautan Drive tetap), sesi `done` baru dibuat (`pb.pilah = true`),
+  sertifikat dibuat dari foto pilihan (bawaan: foto terakhir di deretan).
+- Salah pilih hewan: tombol Batalkan = `POST /api/pilah/batalkan/{id}`. Foto kembali ke kotak masuk,
+  sertifikat dibuang, catatan di database pendaftaran dikosongkan. Lalu pilah ulang.
+- Foto yang bukan foto hewan: Sisihkan = `POST /api/pilah/sisihkan`, pindah ke `Camera <booth>/Disisihkan`.
+- Papan pantau (`/pantau.html`) untuk monitor kedua: urutan sesi, foto di Drive, status sertifikat, nama folder.
+- Berkas di `tether_dropbox` yang sudah beres diingat di tabel `sumber_selesai`. Foto yang mendarat saat
+  server mati diambil begitu server hidup lagi, dan foto lama tidak masuk dua kali.
+- Alur lama (halaman Sesi: pilih hewan dulu, baru jepret) tetap jalan. Selama ada sesi aktif di laptop itu,
+  foto masuk sesi tersebut, bukan kotak masuk. Jangan campur dua alur di satu laptop.
+- Ringkasan semua laptop dari Mac panitia: `~/.venvs/mcfbooth/bin/python alat/pantau_acara.py`.
+
+| Gejala | Lihat dulu | Berkas |
+|---|---|---|
+| Foto tidak muncul di meja pilah | ada di `tether_dropbox/`? log `Disalin ke arsip: ..._kotak_masuk_...`? `/api/pilah/papan` bagian `lokal` (pending, failed) | `app/watcher.py`, `app/drive_client.py` (`folder_kotak`) |
+| Foto kamera lain tidak muncul | laptop itu menyala dan punya internet? isi folder `Camera <booth>` di Drive | paket laptop kedua, `logs/booth.log` di laptop itu |
+| Cetak sertifikat ditolak "belum reg ulang" | peserta belum punya nomor urut di server pendaftaran | `app/petblessing.py`, server lokal hari-H |
+| Foto masuk folder hewan yang salah | Batalkan di tabel Sudah dipilah, lalu pilah ulang | `app/pilah.py` (`batalkan`) |
+| Thumbnail foto kamera lain kosong | Drive belum selesai membuat thumbnail, halaman mencoba lagi tiap 5 detik | `app/pilah.py` (`thumb`), `drive_client.thumb_berkas` |
+
 ## Aturan nama (Pet Blessing)
 
 - Nomor pendaftaran = nomor di QR pendaftaran. Menentukan pos reg ulang (ganjil Pos A, genap Pos B).
@@ -61,6 +91,7 @@ py uji/uji_v1.py            # alur penuh tanpa Drive
 py uji/uji_sertifikat.py    # mode Pet Blessing + sertifikat (PostgREST tiruan)
 py uji/uji_ganti_nama.py    # ganti nama folder ke nomor urut
 $env:MCF_DRIVE_PALSU=1; py uji/uji_drive_palsu.py   # Drive tiruan
+py uji/uji_pilah.py         # kotak masuk, meja pilah, batalkan (BOOTH_ID diatur ujinya sendiri)
 ```
 
 Kalau `.env` laptop berisi `DRIVE_FOLDER_RAW_ID`, kosongkan dulu untuk uji:

@@ -312,6 +312,36 @@ donasi, dan bukti transfer tidak terlihat dari booth.
 
 Bawaan repo ini `PHOTOBOOTH_MODE=mcfbooth`: aplikasi berjalan seperti photobooth biasa.
 
+### Meja pilah: jepret dulu, pilah belakangan
+
+Dipakai kalau fotografer tidak sempat mengoperasikan laptop. Tambahkan ke `.env` tiap laptop receiver:
+
+```
+BOOTH_ID=Ganjil
+```
+
+(`Genap` untuk laptop kamera kedua.) Sejak itu foto yang datang tanpa sesi aktif naik ke
+`Raw Photo Pet Blessings/!Need Organized/Camera Ganjil/` dengan nama `Ganjil_093512_DSC00012.JPG`
+(jam mendarat di laptop), tanpa perlu operator.
+
+Admin membuka **Meja pilah** (`http://127.0.0.1:8000/pilah.html`) di laptop utama:
+
+1. Klik foto terakhir milik hewan ini. Semua foto sebelumnya ikut terpilih. Urutan aman untuk
+   fotografer: foto stiker nomor urut dulu, lalu foto hewannya.
+2. Ketik nomor urut di stiker, misalnya `27a`.
+3. Tekan **Cetak sertifikat**. Foto pindah ke `027 Nama Pemilik/027A Nama Hewan (Jenis)/`, sertifikat
+   dibuat dari foto terakhir (atau foto yang diberi tanda "Pakai untuk sertifikat") dan naik ke folder
+   Sertifikat.
+
+Salah pilih hewan: tekan **Batalkan** di tabel "Sudah dipilah", fotonya kembali ke kotak masuk.
+Jepretan uji atau foto yang bukan foto hewan: **Sisihkan foto terpilih**.
+
+Monitor kedua menampilkan **Papan pantau** (`http://127.0.0.1:8000/pantau.html`): urutan sesi, jumlah
+foto di Drive, status sertifikat, dan nama folder untuk dicocokkan dengan Drive.
+
+Laptop receiver yang tidak punya Python: salin folder paket portabel (Python ikut di dalamnya), lalu klik
+dua kali `Nyalakan Photobooth.cmd`. Tidak ada yang dipasang di laptop itu.
+
 ### Per hewan
 
 1. **Scan QR pendaftaran** di HP pemilik: lewat kamera laptop (tombol Scan dengan kamera
