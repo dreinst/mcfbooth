@@ -116,7 +116,9 @@ if JALAN and not ACARA_JALAN:
             p.rename(cad / nama)
     for nama in ("local_archive", "thumbs", "qr_codes", "tether_dropbox"):
         (AKAR / nama).mkdir(exist_ok=True)
-    subprocess.Popen(f"cd '{AKAR}' && nohup ~/.venvs/mcfbooth/bin/python -m uvicorn app.server:app --port 8000 > /tmp/mcfbooth-server.out 2>&1 &", shell=True)
+    # Dilepas penuh dari proses ini, supaya alat ini selesai walau keluarannya sedang disalurkan ke perintah lain.
+    subprocess.Popen(f"cd '{AKAR}' && exec ~/.venvs/mcfbooth/bin/python -m uvicorn app.server:app --port 8000 > /tmp/mcfbooth-server.out 2>&1",
+                     shell=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     print(f"Mac: data uji dipindah ke {cad.name}/, booth dinyalakan ulang")
     PS = (f"cd 'E:\\Photobooth System'; Stop-ScheduledTask -TaskName PhotoboothServer -ErrorAction SilentlyContinue; "
           "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'python' -and $_.CommandLine -match 'uvicorn' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; "
