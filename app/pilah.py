@@ -115,7 +115,9 @@ def _peta_kotak() -> dict[str, tuple[dict, dict]]:
 
 def tetapkan(file_ids: list[str], owner_id: str, pet_id: str, terbaik: str | None = None) -> dict:
     """Deretan foto di kotak masuk menjadi milik satu hewan: foto pindah ke
-    folder hewan, sertifikat dibuat dari foto `terbaik` (bawaan: foto terakhir)."""
+    folder hewan, sertifikat dibuat dari foto `terbaik` (bawaan: foto terakhir).
+    Hewan yang sudah punya sertifikat hanya mendapat sertifikat baru kalau
+    `terbaik` disebut: menambah foto tidak boleh diam-diam mengganti sertifikat."""
     if not file_ids:
         raise db.GalatDB("Pilih dulu fotonya.", "foto_tidak_cocok")
     pemilik = petblessing.pemilik_dari_id(owner_id)
@@ -128,6 +130,8 @@ def tetapkan(file_ids: list[str], owner_id: str, pet_id: str, terbaik: str | Non
     pb = {"owner_id": pemilik["id"], "pet_id": hewan["id"], "nomor": pemilik["nomor"],
           "nomor_daftar": pemilik.get("nomor_daftar"), "huruf": hewan["huruf"], "label": hewan["label"],
           "pemilik": pemilik["nama"], "hewan": hewan["nama"], "jenis": hewan["jenis"], "pilah": True}
+    if terbaik is None and db.sertifikat_per_hewan([pet_id]):
+        pb["tambahan"] = True      # hanya menambah foto, sertifikat yang ada dipertahankan
 
     with _kunci:
         peta = _peta_kotak()
@@ -169,8 +173,8 @@ def tetapkan(file_ids: list[str], owner_id: str, pet_id: str, terbaik: str | Non
             raise db.GalatDB("Foto tidak bisa dipindah di Drive. Coba lagi sebentar.", "drive_tidak_siap")
 
         fid, foto_id, nama = next((d for d in dipindah if d[0] == terbaik), dipindah[-1])
-        foto = db.ambil_foto(foto_id)
-        if not Path(foto["local_path"]).exists():
+        foto = None if pb.get("tambahan") else db.ambil_foto(foto_id)
+        if foto and not Path(foto["local_path"]).exists():
             tujuan = watcher.ARCHIVE_DIR / sesi["session_code"] / nama
             if drive_client.unduh_berkas(fid, tujuan):
                 db.pindah_foto(foto_id, sesi["id"], str(tujuan))
@@ -188,7 +192,8 @@ def tetapkan(file_ids: list[str], owner_id: str, pet_id: str, terbaik: str | Non
     log.info("Pilah: %d foto -> %s (%d gagal dipindah, sertifikat %s)", len(dipindah), sesi["guest_name"],
              len(gagal), "dibuat" if bisa else "TIDAK dibuat")
     peristiwa.kirim({"jenis": "pilah", "session_id": sesi["id"]}, ke_tamu=False)
-    return {"sesi": db.ambil_sesi(sesi["id"]), "dipindah": len(dipindah), "gagal": gagal, "sertifikat": bisa}
+    return {"sesi": db.ambil_sesi(sesi["id"]), "dipindah": len(dipindah), "gagal": gagal, "sertifikat": bisa,
+            "tambahan": bool(pb.get("tambahan"))}
 
 
 def sisihkan(file_ids: list[str]) -> dict:
@@ -285,7 +290,7 @@ def papan(limit: int = 300) -> dict:
             "foto": s["foto"]["total"], "foto_drive": s["foto"]["uploaded"], "foto_gagal": s["foto"]["failed"],
             "sertifikat": srt.get("status"), "tercatat": bool(srt.get("tercatat")), "sertifikat_id": srt.get("id"),
             "folder": f"{petblessing.folder_pemilik(pb)} / {petblessing.folder_hewan(pb)}",
-            "folder_link": s.get("drive_folder_link"), "pilah": bool(pb.get("pilah")),
+            "folder_link": s.get("drive_folder_link"), "pilah": bool(pb.get("pilah")), "tambahan": bool(pb.get("tambahan")),
             "berjalan": s["status"] == "active", "waktu": s.get("finished_at") or s["started_at"],
         })
     isi = kotak()

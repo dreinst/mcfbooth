@@ -106,6 +106,16 @@ def main() -> int:
             jatuhkan(tether, "DSC00004.JPG")
             u.cek("foto baru masuk kotak, bukan ke sesi yang baru dipilah",
                   bool(u.tunggu(lambda: len(ganjil(c)) == 2, 20)) and c.get(f"/api/sessions/{sid}").json()["foto"]["total"] == 2, ganjil(c))
+            n_srt = sum(1 for p_ in pohon(c) if p_.startswith("palsu-sert/"))
+            susulan = next(b for b in ganjil(c) if b["nama"].endswith("DSC00004.JPG"))
+            h2 = c.post("/api/pilah/tetapkan", json={"file_ids": [susulan["id"]], "owner_id": us.OWNER, "pet_id": us.PET_A}).json()
+            time.sleep(2)
+            u.cek("foto susulan untuk hewan yang sudah bersertifikat hanya ditambahkan, sertifikat tidak diganti",
+                  h2["dipindah"] == 1 and h2["tambahan"] and not h2["sertifikat"]
+                  and sum(1 for p_ in pohon(c) if p_.startswith("palsu-sert/")) == n_srt, h2)
+            u.cek("membatalkan foto susulan tidak mengosongkan tautan sertifikat",
+                  c.post(f"/api/pilah/batalkan/{h2['sesi']['id']}").status_code == 200
+                  and not any(b["certificate_url"] is None for b in us.patch_untuk(us.PET_A, "certificate_url")))
 
             print("== 5. Batalkan: foto kembali, sertifikat dan catatan dibersihkan ==")
             r = c.post(f"/api/pilah/batalkan/{sid}")

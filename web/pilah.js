@@ -54,6 +54,7 @@
 
   function chipSertifikat(b) {
     if (b.berjalan) return chip('wait', 'Sesi masih berjalan');
+    if (b.tambahan) return chip('ok', 'Foto tambahan, sertifikat sudah ada');
     if (!b.sertifikat) return chip('bad', 'Belum ada sertifikat');
     if (b.sertifikat === 'render') return chip('wait', 'Sedang dibuat');
     if (b.sertifikat === 'menunggu') return chip('wait', 'Dibuat, sedang naik ke Drive');
@@ -68,6 +69,9 @@
   }
 
   function gambarPapan(d) {
+    // Halaman diperbarui dari jauh: muat ulang sendiri saat tidak ada pekerjaan yang sedang dipegang.
+    if (S.versi && d.versi && d.versi !== S.versi && !S.sibuk && !S.pilih.length) { location.reload(); return; }
+    S.versi = S.versi || d.versi;
     var ringkas = $('[data-ringkas]');
     if (ringkas) {
       ringkas.textContent = '';
@@ -216,12 +220,21 @@
       e.terpilih.hidden = false;
       e.terpilih.textContent = '';
       e.terpilih.appendChild(el('strong', { text: S.hewan.label + ' ' + S.hewan.nama + (S.hewan.jenis ? ' (' + S.hewan.jenis + ')' : '') }));
-      e.terpilih.appendChild(el('div', { class: 'small', text: S.hewan.pemilik + (S.hewan.sudah ? ' · sudah punya sertifikat, akan diganti yang baru' : '') }));
+      e.terpilih.appendChild(el('div', { class: 'small', text: S.hewan.pemilik }));
+      if (S.hewan.sudah) e.terpilih.appendChild(el('div', { class: 'small', text: S.terbaik
+        ? 'Sudah punya sertifikat. Sertifikat diganti dengan foto yang Anda tandai.'
+        : 'Sudah punya sertifikat. Foto ini hanya ditambahkan ke foldernya. Tekan "Pakai untuk sertifikat" di salah satu foto kalau sertifikatnya mau diganti.' }));
+      // Kamera ganjil melayani nomor ganjil, kamera genap nomor genap: beri tahu kalau tidak cocok.
+      var ganjil = Number(S.hewan.label.slice(0, 3)) % 2 === 1;
+      if ((S.kam === 'Ganjil' && !ganjil) || (S.kam === 'Genap' && ganjil)) {
+        e.terpilih.appendChild(el('div', { class: 'p-awas', text: 'Periksa lagi: nomor ' + (ganjil ? 'ganjil' : 'genap') + ' tapi fotonya dari Camera ' + S.kam + '.' }));
+      }
     } else e.terpilih.hidden = true;
     var alasan = S.sibuk ? 'Sedang diproses…' : !n ? 'Pilih fotonya dulu.' : !S.hewan ? 'Ketik nomor urut lalu pilih hewannya.' : '';
     e.cetak.disabled = !!alasan; e.sisih.disabled = S.sibuk || !n;
     e.alasan.textContent = alasan;
-    e.cetak.textContent = S.sibuk ? 'Memproses…' : (S.hewan && n ? 'Cetak sertifikat ' + S.hewan.label : 'Cetak sertifikat');
+    var tambah = S.hewan && S.hewan.sudah && !S.terbaik;
+    e.cetak.textContent = S.sibuk ? 'Memproses…' : (S.hewan && n ? (tambah ? 'Tambah foto ke ' : 'Cetak sertifikat ') + S.hewan.label : 'Cetak sertifikat');
   }
 
   function pilihHewan(o, h) {
@@ -282,10 +295,11 @@
   e.cetak.addEventListener('click', function () {
     if (e.cetak.disabled || !S.hewan || !S.pilih.length) return;
     var h = S.hewan;
-    kerjakan('/api/pilah/tetapkan', { file_ids: S.pilih, owner_id: h.owner_id, pet_id: h.pet_id, terbaik: S.terbaik || S.pilih[S.pilih.length - 1] },
+    // Hewan yang sudah punya sertifikat: tanpa foto yang ditandai, sertifikatnya dipertahankan.
+    kerjakan('/api/pilah/tetapkan', { file_ids: S.pilih, owner_id: h.owner_id, pet_id: h.pet_id, terbaik: S.terbaik || (h.sudah ? null : S.pilih[S.pilih.length - 1]) },
       function (r) {
         return h.label + ' ' + h.nama + ': ' + r.dipindah + ' foto masuk foldernya'
-          + (r.sertifikat ? ', sertifikat sedang dibuat.' : ', tapi sertifikat TIDAK dibuat (foto pilihan tidak terbaca).')
+          + (r.sertifikat ? ', sertifikat sedang dibuat.' : r.tambahan ? ', sertifikat yang lama dipertahankan.' : ', tapi sertifikat TIDAK dibuat (foto pilihan tidak terbaca).')
           + (r.gagal.length ? ' ' + r.gagal.length + ' foto gagal dipindah dan masih di kotak masuk.' : '');
       });
   });

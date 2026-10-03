@@ -286,9 +286,11 @@ def pilah_batalkan(sesi_id: int):
 
 @app.get("/api/pilah/papan")
 def pilah_papan():
-    """Papan pantau untuk monitor kedua dan meja pilah."""
+    """Papan pantau untuk monitor kedua dan meja pilah. `versi` berubah kalau
+    berkas halamannya diganti, supaya halaman yang terbuka memuat ulang sendiri."""
     _harus_pb()
-    return pilah.papan()
+    versi = max(int((WEB_DIR / n).stat().st_mtime) for n in ("pilah.js", "pilah.css", "pilah.html", "pantau.html"))
+    return {**pilah.papan(), "versi": str(versi)}
 
 
 @app.post("/api/sessions/{sesi_id}/sertifikat", status_code=202)

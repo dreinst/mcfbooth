@@ -36,6 +36,7 @@
 .p-jenis { font-size: 12px; opacity: .8; font-weight: 500; }
 .p-terpilih { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: var(--accent); color: #fff; }
 .p-terpilih .small { color: rgba(255, 255, 255, .88); margin-top: 2px; }
+.p-awas { margin-top: 8px; padding: 6px 10px; border-radius: 8px; background: #FDE68A; color: #5B3A06; font-size: 13px; font-weight: 700; }
 .p-cetak { width: 100%; min-height: 64px; font-size: 19px; font-weight: 800; }
 .p-cetak:disabled, .p-sisih:disabled { opacity: .5; cursor: not-allowed; }
 .p-sisih { width: 100%; }
