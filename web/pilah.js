@@ -200,11 +200,20 @@
 
   function kamTerpilih() { return S.kamera.filter(function (k) { return k.nama === S.kam; })[0]; }
 
-  function klikFoto(kam, idx) {
+  // Klik = pilih atau lepas SATU foto. Shift+klik = pilih deretan dari foto terpilih terakhir sampai foto ini.
+  // (Dulu satu klik memilih semua foto sebelumnya; di hari H itu membuat foto hewan lain ikut terseret.)
+  function klikFoto(kam, idx, ev) {
     if (S.sibuk) return;
     if (S.kam !== kam.nama) { S.kam = kam.nama; S.pilih = []; S.terbaik = null; }
-    if (idx === S.pilih.length - 1) { S.pilih = []; S.kam = null; S.terbaik = null; }   // klik lagi foto terakhir = lepas
-    else S.pilih = kam.berkas.slice(0, idx + 1).map(function (b) { return b.id; });
+    var urut = kam.berkas.map(function (b) { return b.id; }), id = urut[idx], set = {};
+    S.pilih.forEach(function (x) { set[x] = 1; });
+    if (ev && ev.shiftKey && S.pilih.length) {
+      var dari = urut.indexOf(S.pilih[S.pilih.length - 1]);
+      for (var j = Math.min(dari, idx); j <= Math.max(dari, idx); j++) set[urut[j]] = 1;
+    } else if (set[id]) delete set[id];
+    else set[id] = 1;
+    S.pilih = urut.filter(function (x) { return set[x]; });   // tetap urut seperti di kotak masuk
+    if (!S.pilih.length) { S.kam = null; S.terbaik = null; }
     if (S.terbaik && S.pilih.indexOf(S.terbaik) < 0) S.terbaik = null;
     gambarKotak(); gambarPanel();
   }
@@ -235,7 +244,7 @@
           el('span', { class: 'p-jam', text: b.jam || b.nama }),
           ke >= 0 ? el('span', { class: 'p-no', text: String(ke + 1) }) : null,
         ]);
-        kotak.addEventListener('click', function () { klikFoto(kam, i); });
+        kotak.addEventListener('click', function (ev) { klikFoto(kam, i, ev); });
         if (ke >= 0) {
           var bintang = el('button', { class: 'p-bintang', type: 'button', text: b.id === terbaik ? 'Foto sertifikat' : 'Pakai untuk sertifikat' });
           bintang.addEventListener('click', function (ev) { ev.stopPropagation(); S.terbaik = b.id; gambarKotak(); gambarPanel(); });
@@ -274,9 +283,10 @@
   function gambarPanel() {
     var kam = kamTerpilih(), n = S.pilih.length;
     if (n && kam) {
-      var pertama = kam.berkas[0], akhir = kam.berkas[n - 1];
+      var dipilih = kam.berkas.filter(function (b) { return S.pilih.indexOf(b.id) >= 0; });
+      var pertama = dipilih[0] || kam.berkas[0], akhir = dipilih[dipilih.length - 1] || pertama;
       e.foto.textContent = n + ' foto dari Camera ' + kam.nama + (pertama.jam ? ' (' + pertama.jam + (n > 1 ? ' sampai ' + akhir.jam : '') + ')' : '');
-    } else e.foto.textContent = 'Belum ada foto dipilih. Klik foto terakhir milik hewan ini, semua foto sebelumnya ikut terpilih.';
+    } else e.foto.textContent = 'Belum ada foto dipilih. Klik tiap foto milik hewan ini (klik lagi untuk melepas). Shift+klik memilih satu deretan sekaligus.';
     e.foto.className = n ? 'p-info is-isi' : 'p-info';
     if (S.hewan) {
       e.terpilih.hidden = false;
