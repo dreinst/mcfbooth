@@ -60,8 +60,10 @@ def main():
     kini = papan()
     baru = {k: b for k, b in kini.items() if k not in sudah}
     if "--tandai" in sys.argv:
-        json.dump(sorted(set(kini) | sudah), open(CATAT, "w"))
-        return print("ditandai sudah dicek:", len(kini))
+        # Hanya yang lembarnya sudah dibuat (dan dilihat) yang ditandai; pemilahan yang muncul sesudahnya menunggu giliran.
+        dilihat = set(json.load(open(W / "baru-dilihat.json"))) if (W / "baru-dilihat.json").exists() else set()
+        json.dump(sorted(dilihat | sudah), open(CATAT, "w"))
+        return print("ditandai sudah dicek:", sorted(dilihat))
     svc, SEL = d._svc(), 420
     for k, b in baru.items():
         fid = re.search(r"folders/([^/?]+)", b["folder_link"]).group(1)
@@ -89,6 +91,7 @@ def main():
         tujuan = W / f"cek-{b['label']}.jpg"
         L.save(tujuan, quality=86)
         print(f"{k} | {b['label']} {b['hewan']} | {b['pemilik']} | {len(foto)} foto | pendaftaran {'ada' if reg else 'TIDAK ADA'} | {tujuan}")
+    json.dump(sorted(baru), open(W / "baru-dilihat.json", "w"))
     if not baru:
         print("tidak ada pemilahan baru")
 
