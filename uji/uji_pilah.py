@@ -80,6 +80,8 @@ def main() -> int:
             u.cek("'27a' menemukan pemilik nomor 27 dan menunjuk huruf A",
                   len(r["hasil"]) == 1 and r["huruf"] == "A" and [h["label"] for h in r["hasil"][0]["hewan"]] == ["027A", "027B"], r)
             u.cek("nomor lain tidak ikut", c.get("/api/pilah/cari", params={"q": "2"}).json()["hasil"] == [])
+            r = c.get("/api/pilah/cari", params={"q": "mochi"}).json()
+            u.cek("nama hewan juga bisa dicari", [o["id"] for o in r["hasil"]] == [us.OWNER], r)
 
             print("== 3. Pilah: dua foto pertama milik 027A ==")
             r = c.post("/api/pilah/tetapkan", json={"file_ids": [isi[1]["id"], isi[0]["id"]], "owner_id": us.OWNER,

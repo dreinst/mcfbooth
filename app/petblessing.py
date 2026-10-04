@@ -178,9 +178,9 @@ _segar_pada, _putus = -1e9, False
 
 def cari_nama(q: str, batas: int = 8) -> tuple[list[dict], bool]:
     """Untuk pemilik yang tangannya penuh menggendong hewan dan tidak bisa
-    menunjukkan QR: cari dari nama (semua kata harus ada) atau nomor
-    kedatangan. Daftar disegarkan paling sering tiap 15 detik supaya mengetik
-    tidak memanggil API di setiap huruf."""
+    menunjukkan QR: cari dari nama pemilik atau nama hewan (semua kata harus
+    ada di salah satunya) atau nomor kedatangan. Daftar disegarkan paling
+    sering tiap 15 detik supaya mengetik tidak memanggil API di setiap huruf."""
     global _segar_pada, _putus
     if time.monotonic() - _segar_pada > 15:
         _putus = segarkan() is None
@@ -192,7 +192,8 @@ def cari_nama(q: str, batas: int = 8) -> tuple[list[dict], bool]:
     angka = q.strip().lstrip("0")
     hasil = [o for o in daftar
              if (angka.isdigit() and str(o.get("nomor") or "") == angka)
-             or all(k in o["nama"].lower() for k in kata)]
+             or all(k in o["nama"].lower() for k in kata)
+             or any(all(k in (h.get("nama") or "").lower() for k in kata) for h in o["hewan"])]
     hasil.sort(key=lambda o: (o.get("nomor") is None, o.get("nomor") or 0, o["nama"]))
     return hasil[:batas], dari_salinan
 
