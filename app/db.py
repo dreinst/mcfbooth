@@ -742,6 +742,15 @@ def sertifikat_tertunda() -> list[dict]:
         ).fetchall()]
 
 
+def sertifikat_render_macet() -> list[dict]:
+    """Sertifikat terbaru tiap sesi yang masih 'render' (lihat sertifikat.lanjutkan_render)."""
+    with koneksi() as conn:
+        return [dict(b) for b in conn.execute(
+            "SELECT * FROM sertifikat WHERE status = 'render' "
+            "AND id IN (SELECT max(id) FROM sertifikat GROUP BY session_id) ORDER BY id"
+        ).fetchall()]
+
+
 def sertifikat_per_hewan(pet_ids: list[str]) -> dict[str, dict]:
     """Sertifikat terakhir per hewan, supaya operator tahu hewan mana yang
     sudah selesai difoto ketika pemilik yang sama kembali."""

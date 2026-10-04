@@ -93,6 +93,10 @@ async def daur_hidup(app: FastAPI):
     if drive_client.PALSU:
         log.warning("MODE UJI: Google Drive digantikan tiruan dalam memori (MCF_DRIVE_PALSU=1).")
     await asyncio.get_running_loop().run_in_executor(None, watcher.pulihkan)
+    try:
+        sertifikat.lanjutkan_render()
+    except Exception as e:   # pemulihan ini pelengkap; server tetap harus menyala
+        log.warning("Sertifikat yang terhenti belum bisa dilanjutkan: %s", str(e)[:160])
     yield
     watcher.berhenti()
     log.info("=== MCF Photobooth dihentikan ===")

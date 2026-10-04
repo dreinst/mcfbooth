@@ -218,6 +218,16 @@ def _catat(srt: dict) -> None:
         _kirim("sertifikat_tercatat", db.ubah_sertifikat(srt["id"], tercatat=1))
 
 
+def lanjutkan_render() -> int:
+    """Dipanggil sekali saat server dinyalakan: sertifikat yang masih berstatus 'render' berarti servernya
+    dimatikan di tengah pembuatan. Tanpa ini sertifikat itu tertahan selamanya dan hewannya tidak pernah siap cetak."""
+    macet = db.sertifikat_render_macet()
+    for srt in macet:
+        log.warning("Sertifikat %s terhenti saat server dimatikan, dibuat ulang.", srt["nama_berkas"])
+        watcher._jadwalkan(_render, srt["id"])
+    return len(macet)
+
+
 def susulkan() -> int:
     """Dipanggil penjaga latar: lanjutkan sertifikat yang tertahan."""
     tertunda = db.sertifikat_tertunda()
