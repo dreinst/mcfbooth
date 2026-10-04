@@ -235,6 +235,9 @@ def batalkan(sesi_id: int) -> dict:
     asal = pb.get("asal") or {}
     with _kunci:
         kembali, tertinggal = 0, 0
+        # Dicatat sebelum foto dihapus: baris sertifikat ikut terhapus bersama fotonya (ON DELETE CASCADE),
+        # sehingga di laptop yang bukan penerima kamera itu sertifikat di Drive dulu tidak ikut terbuang.
+        sertifikat_lama = db.sertifikat_sesi(sesi_id)
         for foto in db.daftar_foto(sesi_id):
             fid = foto.get("drive_file_id")
             kam = asal.get(fid) or watcher.BOOTH_ID
@@ -254,7 +257,7 @@ def batalkan(sesi_id: int) -> dict:
             raise db.GalatDB(f"{tertinggal} foto belum bisa dikembalikan ke kotak masuk (Drive tidak menjawab). "
                              "Coba batalkan lagi sebentar.", "drive_tidak_siap")
         lain = _sertifikat_lain(pb.get("pet_id"), sesi_id)
-        for srt in db.sertifikat_sesi(sesi_id):
+        for srt in sertifikat_lama:
             for berkas_id in (srt.get("drive_png_id"), srt.get("drive_pdf_id")):
                 if berkas_id:
                     drive_client.buang_berkas(berkas_id)
