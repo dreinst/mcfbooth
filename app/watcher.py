@@ -475,7 +475,9 @@ def _upload_dengan_retry(foto_id: int, path: str, folder_id: str, session_id: in
     setelah percobaan terakhir; retry_count = jumlah pengulangan."""
     percobaan = len(RETRY_DELAYS) + 1
     for i in range(percobaan):
-        hasil = drive_client.upload_foto(path, folder_id, cek_dulu=i > 0,
+        # Selalu cek dulu: antrean ulang (pemulihan, tombol ulang) juga mulai dari percobaan pertama,
+        # dan upload yang sampai di Google tapi responsnya hilang jadi berkas kembar di kotak masuk.
+        hasil = drive_client.upload_foto(path, folder_id, cek_dulu=True,
                                          custom_name=f"{BOOTH_ID}_{Path(path).name}" if BOOTH_ID else None)
         if hasil:
             db.tandai_foto_uploaded(foto_id, hasil["id"])
